@@ -51,12 +51,23 @@ func (s *VCPScanner) Analyze(chart *model.StockChartData) *model.VCPAnalysis {
 	lastContrVol := contractions[len(contractions)-1].AvgVolume
 	volumeDryUp := lastContrVol < avgVol50*0.7 // last contraction volume < 70% of 50-day avg
 
-	// ── Step 4: Pivot point = high of last contraction ────────────────────
+	// ── Step 4: Entry / Stop / Target ────────────────────────────────────
 	lastC := contractions[len(contractions)-1]
 	pivot := lastC.HighPrice
-	entry := roundTo2(pivot * 1.01) // 1% above pivot
+	entry := roundTo2(pivot * 1.01)    // 1% above pivot
 	stopLoss := roundTo2(entry * 0.92) // 8% below entry
-	target := roundTo2(entry * 1.25)   // 25% above entry
+
+	// Target: based on the prior advance magnitude before the VCP formed.
+	// 1. Find the index of the first contraction's high in candles
+	// 2. Scan backwards to find the lowest low (the rally start)
+	// 3. prior advance % = (first contraction high - rally low) / rally low
+	// 4. Target = entry × (1 + prior advance %)
+	firstC := contractions[0]
+	priorAdvancePct := calcPriorAdvance(lows, candles, firstC)
+	if priorAdvancePct < 0.20 {
+		priorAdvancePct = 0.20 // floor: at least 20%
+	}
+	target := roundTo2(entry * (1 + priorAdvancePct))
 
 	// ── Step 5: Score ─────────────────────────────────────────────────────
 	score := calcScore(contractions, passesTrend, volumeDryUp)
@@ -202,6 +213,42 @@ func detectContractions(
 	}
 
 	return contractions
+}
+
+// calcPriorAdvance computes the % advance that occurred before the VCP started.
+// It finds the first contraction's high in the candle array, then scans back
+// up to 120 bars to find the lowest low. The advance % = (high - low) / low.
+//
+// Example: stock rallied from $40 to $60 before the first contraction →
+// priorAdvancePct = (60-40)/40 = 0.50 → target = entry × 1.50
+func calcPriorAdvance(lows []float64, candles []model.OHLCV, firstC model.Contraction) float64 {
+	// Find the candle index matching the first contraction's high date
+	highIdx := -1
+	for i, c := range candles {
+		if c.Date == firstC.HighDate {
+			highIdx = i
+			break
+		}
+	}
+	if highIdx <= 0 {
+		return 0.25 // fallback
+	}
+
+	// Scan backwards up to 120 bars to find the lowest low before the rally
+	lookback := 120
+	scanStart := max(0, highIdx-lookback)
+	lowestLow := lows[scanStart]
+	for i := scanStart; i < highIdx; i++ {
+		if lows[i] < lowestLow {
+			lowestLow = lows[i]
+		}
+	}
+
+	if lowestLow <= 0 {
+		return 0.25
+	}
+
+	return (firstC.HighPrice - lowestLow) / lowestLow
 }
 
 // filterDecreasing finds the longest tail of the slice where depths are
