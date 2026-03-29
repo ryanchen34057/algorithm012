@@ -53,7 +53,7 @@ type yahooResponse struct {
 // FetchHistory returns up to 12 months of daily OHLCV for a symbol.
 func (yf *YahooFinance) FetchHistory(symbol string) (*model.StockChartData, error) {
 	end := time.Now()
-	start := end.AddDate(-1, 0, 0) // 12 months back
+	start := end.AddDate(-2, 0, 0) // 2 years back (ensures MA200 has full coverage)
 
 	url := fmt.Sprintf(
 		"https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&period1=%d&period2=%d",

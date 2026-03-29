@@ -94,7 +94,14 @@ export default function StockChart({ chart, vcp }: Props) {
       { data: chart.ma200, color: '#f472b6', title: 'MA200' },
     ];
     for (const { data, color, title } of maConfigs) {
-      const maSeries = lc.addSeries(LineSeries, { color, lineWidth: 1, title });
+      const maSeries = lc.addSeries(LineSeries, {
+        color,
+        lineWidth: 1,
+        title,
+        crosshairMarkerVisible: false,
+        lastValueVisible: true,
+        priceLineVisible: false,
+      });
       maSeries.setData(
         chart.candles
           .map((d, i) => ({ time: d.date as Time, value: data[i] }))
