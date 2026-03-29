@@ -211,13 +211,25 @@ export default function Dashboard() {
         </div>
       )}
 
-      {scannedAt && !loading && (
-        <div style={{ color: c.textDim, fontSize: 13 }}>
-          掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
-          &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
-          <strong style={{ color: c.text }}>{stocks.length}</strong> 支震撼型跳空
-        </div>
-      )}
+      {scannedAt && !loading && (() => {
+        const longCount = stocks.filter((g) => g.direction === 'long').length;
+        const shortCount = stocks.filter((g) => g.direction === 'short').length;
+        const filtered = stocks.filter((g) => filter.direction === 'all' || g.direction === filter.direction);
+        const dirLabel = filter.direction === 'all' ? '' : filter.direction === 'long' ? '（篩選：做多）' : '（篩選：做空）';
+        return (
+          <div style={{ color: c.textDim, fontSize: 13 }}>
+            掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
+            &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
+            <strong style={{ color: c.text }}>{stocks.length}</strong> 支震撼型跳空
+            <span style={{ color: c.textMuted }}>
+              （<span style={{ color: c.up }}>做多 {longCount}</span> / <span style={{ color: c.down }}>做空 {shortCount}</span>）
+            </span>
+            {filter.direction !== 'all' && (
+              <span style={{ color: c.blue }}> → 顯示 {filtered.length} 支{dirLabel}</span>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Stock list with charts */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -230,7 +242,14 @@ export default function Dashboard() {
 
       {stocks.filter((g) => filter.direction === 'all' || g.direction === filter.direction).length === 0 && stocks.length > 0 && !loading && scannedAt && (
         <div style={{ ...S.empty, color: c.textDim }}>
-          目前篩選方向下沒有符合條件的股票，試試切換「全部」。
+          目前篩選方向「{filter.direction === 'long' ? '做多' : filter.direction === 'short' ? '做空' : '全部'}」下沒有符合條件的股票。
+          <br />
+          <button
+            onClick={() => setFilter((f) => ({ ...f, direction: 'all' }))}
+            style={{ background: c.blue, color: '#fff', border: 'none', borderRadius: 4, padding: '6px 16px', marginTop: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+          >
+            切換為「全部」顯示所有 {stocks.length} 支
+          </button>
         </div>
       )}
 
