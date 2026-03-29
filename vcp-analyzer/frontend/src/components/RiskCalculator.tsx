@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { calcPosition } from '../services/api';
-import { PositionResult, VCPAnalysis } from '../types';
+import { PositionResult, GapAnalysis } from '../types';
 import { useColors } from './ThemeContext';
 
 interface Props {
-  vcp: VCPAnalysis;
+  gap: GapAnalysis;
 }
 
-export default function RiskCalculator({ vcp }: Props) {
+export default function RiskCalculator({ gap }: Props) {
   const c = useColors();
   const [maxLoss, setMaxLoss] = useState('');
   const [result, setResult] = useState<PositionResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const isLong = gap.direction === 'long';
 
   const handleCalc = async () => {
     const loss = parseFloat(maxLoss);
@@ -23,7 +25,7 @@ export default function RiskCalculator({ vcp }: Props) {
     setLoading(true);
     setError('');
     try {
-      const res = await calcPosition(vcp.symbol, loss);
+      const res = await calcPosition(gap.symbol, loss);
       setResult(res);
     } catch {
       setError('計算失敗，請稍後重試');
@@ -34,15 +36,20 @@ export default function RiskCalculator({ vcp }: Props) {
 
   return (
     <div style={{ background: c.bgCard, borderRadius: 8, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, border: `1px solid ${c.border}` }}>
-      <h3 style={{ margin: 0, color: c.text, fontSize: 18, fontWeight: 700 }}>風險計算器</h3>
+      <h3 style={{ margin: 0, color: c.text, fontSize: 18, fontWeight: 700 }}>
+        風險計算器
+        <span style={{ fontSize: 13, fontWeight: 400, color: isLong ? c.green : c.red, marginLeft: 8 }}>
+          ({isLong ? '做多' : '做空'})
+        </span>
+      </h3>
 
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ color: c.textMuted, fontSize: 12, textTransform: 'uppercase' }}>進場點</span>
-        <span style={{ color: c.text, fontWeight: 600, fontSize: 15 }}>${vcp.entryPrice}</span>
+        <span style={{ color: c.text, fontWeight: 600, fontSize: 15 }}>${gap.entryPrice}</span>
         <span style={{ color: c.textMuted, fontSize: 12, textTransform: 'uppercase' }}>停損點</span>
-        <span style={{ color: c.red, fontWeight: 600, fontSize: 15 }}>${vcp.stopLoss}</span>
+        <span style={{ color: c.red, fontWeight: 600, fontSize: 15 }}>${gap.stopLoss}</span>
         <span style={{ color: c.textMuted, fontSize: 12, textTransform: 'uppercase' }}>目標價</span>
-        <span style={{ color: c.green, fontWeight: 600, fontSize: 15 }}>${vcp.target}</span>
+        <span style={{ color: c.green, fontWeight: 600, fontSize: 15 }}>${gap.target}</span>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -89,7 +96,7 @@ export default function RiskCalculator({ vcp }: Props) {
 
       {result && (
         <div style={{ background: c.bgInput, borderRadius: 6, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Row label="建議買入股數" value={`${result.shares.toLocaleString()} 股`} big color={c.text} />
+          <Row label={isLong ? '建議買入股數' : '建議放空股數'} value={`${result.shares.toLocaleString()} 股`} big color={c.text} />
           <Row label="每股風險" value={`$${result.riskPerShare}`} />
           <Row label="每股報酬" value={`$${result.rewardPerShare}`} />
           <Row

@@ -1,35 +1,39 @@
 package model
 
-// Contraction represents one VCP tightening phase
-type Contraction struct {
-	Index      int     `json:"index"`       // which contraction (1, 2, 3...)
-	HighDate   string  `json:"highDate"`
-	HighPrice  float64 `json:"highPrice"`
-	LowDate    string  `json:"lowDate"`
-	LowPrice   float64 `json:"lowPrice"`
-	Depth      float64 `json:"depth"`       // % pullback
-	AvgVolume  float64 `json:"avgVolume"`   // average volume during contraction
+// GapDirection indicates whether the gap is bullish or bearish
+type GapDirection string
+
+const (
+	GapUp   GapDirection = "long"  // 做多
+	GapDown GapDirection = "short" // 做空
+)
+
+// GapAnalysis is the full gap-scan result for one stock
+type GapAnalysis struct {
+	Symbol         string       `json:"symbol"`
+	Name           string       `json:"name"`
+	Direction      GapDirection `json:"direction"`      // "long" or "short"
+	GapPercent     float64      `json:"gapPercent"`     // gap size in %
+	TodayOpen      float64      `json:"todayOpen"`
+	TodayClose     float64      `json:"todayClose"`
+	YesterdayOpen  float64      `json:"yesterdayOpen"`
+	YesterdayClose float64      `json:"yesterdayClose"`
+	YesterdayHigh  float64      `json:"yesterdayHigh"`
+	YesterdayLow   float64      `json:"yesterdayLow"`
+	CurrentPrice   float64      `json:"currentPrice"`
+	EntryPrice     float64     `json:"entryPrice"`
+	StopLoss       float64     `json:"stopLoss"`
+	Target         float64     `json:"target"`
+	ADV20          float64     `json:"adv20"`          // 20-day avg daily volume (張)
+	TodayVolume    int64       `json:"todayVolume"`    // today's volume (shares)
+	MA20           float64     `json:"ma20"`
+	MA200          float64     `json:"ma200"`
+	Score          float64     `json:"score"`          // 0-100 quality score
 }
 
-// VCPAnalysis is the full VCP result for one stock
-type VCPAnalysis struct {
-	Symbol       string        `json:"symbol"`
-	Name         string        `json:"name"`
-	Score        float64       `json:"score"`        // 0-100
-	Contractions []Contraction `json:"contractions"`
-	PivotPrice   float64       `json:"pivotPrice"`   // breakout level
-	EntryPrice   float64       `json:"entryPrice"`   // pivot + 1% buffer
-	StopLoss     float64       `json:"stopLoss"`     // 7-8% below entry
-	Target       float64       `json:"target"`       // min R:R 3:1 expected reward
-	CurrentPrice float64       `json:"currentPrice"`
-	AvgVolume50  float64       `json:"avgVolume50"`
-	Stage2       bool          `json:"stage2"`       // passes trend template
-	PassesTrend  bool          `json:"passesTrend"`  // MA alignment OK
-}
-
-// ScanResult is the list of VCP stocks returned by /api/vcp/scan
+// ScanResult is the list of gap stocks returned by /api/gap/scan
 type ScanResult struct {
-	Stocks    []VCPAnalysis `json:"stocks"`
+	Stocks    []GapAnalysis `json:"stocks"`
 	ScannedAt string        `json:"scannedAt"`
 	Total     int           `json:"total"`
 }

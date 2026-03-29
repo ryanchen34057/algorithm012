@@ -8,15 +8,15 @@ import {
   LineSeries,
   Time,
 } from 'lightweight-charts';
-import { StockChartData, VCPAnalysis } from '../types';
+import { StockChartData, GapAnalysis } from '../types';
 import { useColors } from './ThemeContext';
 
 interface Props {
   chart: StockChartData;
-  vcp?: VCPAnalysis;
+  gap?: GapAnalysis;
 }
 
-export default function StockChart({ chart, vcp }: Props) {
+export default function StockChart({ chart, gap }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const disposedRef = useRef(false);
@@ -89,6 +89,7 @@ export default function StockChart({ chart, vcp }: Props) {
 
     // ── Moving averages ─────────────────────────────────────────────────
     const maConfigs = [
+      { data: chart.ma20, color: '#22d3ee', title: 'MA20' },
       { data: chart.ma50, color: '#f59e0b', title: 'MA50' },
       { data: chart.ma150, color: '#a78bfa', title: 'MA150' },
       { data: chart.ma200, color: '#f472b6', title: 'MA200' },
@@ -109,31 +110,48 @@ export default function StockChart({ chart, vcp }: Props) {
       );
     }
 
-    // ── VCP price lines ─────────────────────────────────────────────────
-    if (vcp) {
+    // ── Gap price lines ─────────────────────────────────────────────────
+    if (gap) {
       candleSeries.createPriceLine({
-        price: vcp.entryPrice,
+        price: gap.entryPrice,
         color: c.blue,
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `進場 ${vcp.entryPrice}`,
+        title: `進場 ${gap.entryPrice}`,
       });
       candleSeries.createPriceLine({
-        price: vcp.stopLoss,
+        price: gap.stopLoss,
         color: c.red,
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `停損 ${vcp.stopLoss}`,
+        title: `停損 ${gap.stopLoss}`,
       });
       candleSeries.createPriceLine({
-        price: vcp.target,
-        color: c.green,
+        price: gap.target,
+        color: gap.direction === 'long' ? c.green : '#f472b6',
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `目標 ${vcp.target}`,
+        title: `目標 ${gap.target}`,
+      });
+      // Yesterday's high/low reference lines
+      candleSeries.createPriceLine({
+        price: gap.yesterdayHigh,
+        color: '#f59e0b88',
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: false,
+        title: '昨高',
+      });
+      candleSeries.createPriceLine({
+        price: gap.yesterdayLow,
+        color: '#f59e0b88',
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: false,
+        title: '昨低',
       });
     }
 
@@ -161,7 +179,7 @@ export default function StockChart({ chart, vcp }: Props) {
       }
       chartRef.current = null;
     };
-  }, [chart, vcp, c]);
+  }, [chart, gap, c]);
 
   return (
     <div

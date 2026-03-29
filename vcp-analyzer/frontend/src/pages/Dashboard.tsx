@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { scanVCP } from '../services/api';
-import { VCPAnalysis } from '../types';
+import { scanGap } from '../services/api';
+import { GapAnalysis } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import StockRow from '../components/StockRow';
@@ -12,17 +12,18 @@ interface ScanFilter {
 
 export default function Dashboard() {
   const c = useColors();
-  const [stocks, setStocks] = useState<VCPAnalysis[]>([]);
+  const [stocks, setStocks] = useState<GapAnalysis[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [scannedAt, setScannedAt] = useState('');
   const [totalScanned, setTotalScanned] = useState(0);
-  const [filter, setFilter] = useState<ScanFilter>({ minVolume: 1000, minPrice: 10 });
+  const [filter, setFilter] = useState<ScanFilter>({ minVolume: 500, minPrice: 10 });
+
   const handleScan = async () => {
     setLoading(true);
     setError('');
     try {
-      const result = await scanVCP({
+      const result = await scanGap({
         minVolume: filter.minVolume,
         minPrice: filter.minPrice,
       });
@@ -42,9 +43,9 @@ export default function Dashboard() {
       {/* Header */}
       <div style={S.header}>
         <div>
-          <h1 style={{ ...S.title, color: c.text }}>台股 VCP 分析系統</h1>
+          <h1 style={{ ...S.title, color: c.text }}>台股震撼跳空掃描系統</h1>
           <p style={{ ...S.subtitle, color: c.textMuted }}>
-            自動偵測符合 Mark Minervini VCP 型態的台灣上市櫃股票
+            自動偵測符合「震撼型跳空」條件的台灣上市櫃股票（Gap Up 做多 / Gap Down 做空）
           </p>
         </div>
         <ThemeToggle />
@@ -56,7 +57,7 @@ export default function Dashboard() {
           label="最低日均量（張）"
           value={filter.minVolume}
           onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))}
-          hint="建議 500–2000"
+          hint="建議 300–1000"
         />
         <FilterInput
           label="最低股價（元）"
@@ -82,9 +83,17 @@ export default function Dashboard() {
 
       {/* Legend */}
       <div style={S.legend}>
-        <LegendItem color={c.green} label="分數 ≥ 80：高品質 VCP" />
-        <LegendItem color={c.yellow} label="分數 60-79：中等 VCP" />
-        <LegendItem color={c.red} label="分數 < 60：低信心" />
+        <LegendItem color={c.green} label="Gap Up (做多訊號)" />
+        <LegendItem color={c.red} label="Gap Down (做空訊號)" />
+        <LegendItem color={c.yellow} label="分數越高品質越好" />
+      </div>
+
+      {/* Scan criteria summary */}
+      <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
+        <strong style={{ color: c.text }}>篩選條件（台股版）：</strong><br />
+        股價 TWD 10–500 · ADV20 {'>'} 500 張 · 當日成交量 {'>'} 300 張 · 跳空幅度 3%–40%<br />
+        Gap Up：昨日陰線 + 今開 {'>'} 昨高 + 今開 {'>'} MA20 & MA200<br />
+        Gap Down：昨日陽線 + 今開 {'<'} 昨低 + 今開 {'<'} MA20 & MA200
       </div>
 
       {error && (
@@ -96,28 +105,28 @@ export default function Dashboard() {
       {loading && (
         <div style={{ color: c.textSecondary, fontSize: 14, fontStyle: 'italic', lineHeight: 1.6 }}>
           正在從 TWSE / TPEx 抓取上市櫃股票清單，篩選後逐一向 Yahoo Finance
-          取得歷史 K 線並分析 VCP 型態，股票數量較多時請耐心等待...
+          取得歷史 K 線並分析跳空型態，股票數量較多時請耐心等待...
         </div>
       )}
 
       {scannedAt && !loading && (
         <div style={{ color: c.textDim, fontSize: 13 }}>
           掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
-          &nbsp;·&nbsp;符合篩選條件的股票共分析 {totalScanned} 支，找到{' '}
-          <strong style={{ color: c.text }}>{stocks.length}</strong> 支 VCP 型態
+          &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
+          <strong style={{ color: c.text }}>{stocks.length}</strong> 支震撼型跳空
         </div>
       )}
 
       {/* Stock list with charts */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {stocks.map((vcp) => (
-          <StockRow key={vcp.symbol} vcp={vcp} />
+        {stocks.map((gap) => (
+          <StockRow key={gap.symbol} gap={gap} />
         ))}
       </div>
 
       {stocks.length === 0 && !loading && scannedAt && (
         <div style={{ ...S.empty, color: c.textDim }}>
-          目前沒有符合 VCP 型態的股票。<br />
+          目前沒有符合震撼型跳空條件的股票。<br />
           可以調低最低日均量或股價條件後再試。
         </div>
       )}
@@ -126,7 +135,7 @@ export default function Dashboard() {
         <div style={{ ...S.empty, color: c.textDim }}>
           點擊「掃描全市場」開始分析台灣上市櫃股票。<br />
           <span style={{ fontSize: 13 }}>
-            系統會先從 TWSE / TPEx 抓取完整股票清單，再依成交量與股價篩選後逐一分析。
+            系統會從 TWSE / TPEx 抓取完整股票清單，再依成交量與股價篩選後逐一分析跳空型態。
           </span>
         </div>
       )}

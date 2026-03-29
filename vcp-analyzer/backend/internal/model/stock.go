@@ -18,10 +18,11 @@ type StockInfo struct {
 
 // StockChartData is the full chart payload for a symbol
 type StockChartData struct {
-	Symbol string  `json:"symbol"`
-	Name   string  `json:"name"`
-	Candles []OHLCV `json:"candles"`
-	MA50   []float64 `json:"ma50"`
-	MA150  []float64 `json:"ma150"`
-	MA200  []float64 `json:"ma200"`
+	Symbol  string    `json:"symbol"`
+	Name    string    `json:"name"`
+	Candles []OHLCV   `json:"candles"`
+	MA20    []float64 `json:"ma20"`
+	MA50    []float64 `json:"ma50"`
+	MA150   []float64 `json:"ma150"`
+	MA200   []float64 `json:"ma200"`
 }

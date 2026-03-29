@@ -125,6 +125,7 @@ func (yf *YahooFinance) FetchHistory(symbol string) (*model.StockChartData, erro
 		Symbol:  result.Meta.Symbol,
 		Name:    name,
 		Candles: candles,
+		MA20:    calcMA(closes, 20),
 		MA50:    calcMA(closes, 50),
 		MA150:   calcMA(closes, 150),
 		MA200:   calcMA(closes, 200),

@@ -6,16 +6,27 @@ import (
 	"vcp-analyzer/internal/model"
 )
 
-// CalcPosition computes position sizing from a VCP analysis and a max-loss budget.
+// CalcPosition computes position sizing from a gap analysis and a max-loss budget.
 //
-//   shares = floor( maxLoss / (entryPrice - stopLoss) )
-func CalcPosition(vcp *model.VCPAnalysis, maxLoss float64) *model.PositionResult {
-	riskPerShare := vcp.EntryPrice - vcp.StopLoss
+//	shares = floor( maxLoss / riskPerShare )
+func CalcPosition(gap *model.GapAnalysis, maxLoss float64) *model.PositionResult {
+	var riskPerShare float64
+	if gap.Direction == model.GapUp {
+		riskPerShare = gap.EntryPrice - gap.StopLoss
+	} else {
+		riskPerShare = gap.StopLoss - gap.EntryPrice
+	}
 	if riskPerShare <= 0 {
-		riskPerShare = vcp.EntryPrice * 0.08 // fallback: 8% of entry
+		riskPerShare = gap.EntryPrice * 0.05 // fallback: 5% of entry
 	}
 
-	rewardPerShare := vcp.Target - vcp.EntryPrice
+	var rewardPerShare float64
+	if gap.Direction == model.GapUp {
+		rewardPerShare = gap.Target - gap.EntryPrice
+	} else {
+		rewardPerShare = gap.EntryPrice - gap.Target
+	}
+
 	rrRatio := 0.0
 	if riskPerShare > 0 {
 		rrRatio = rewardPerShare / riskPerShare
@@ -26,20 +37,16 @@ func CalcPosition(vcp *model.VCPAnalysis, maxLoss float64) *model.PositionResult
 		shares = int(math.Floor(maxLoss / riskPerShare))
 	}
 
-	// Taiwan stocks trade in lots of 1000; floor to nearest 1000
-	// (Uncomment if you want lot-based sizing)
-	// shares = (shares / 1000) * 1000
-
 	return &model.PositionResult{
-		Symbol:          vcp.Symbol,
-		EntryPrice:      vcp.EntryPrice,
-		StopLoss:        vcp.StopLoss,
-		Target:          vcp.Target,
+		Symbol:          gap.Symbol,
+		EntryPrice:      gap.EntryPrice,
+		StopLoss:        gap.StopLoss,
+		Target:          gap.Target,
 		RiskPerShare:    roundTo2(riskPerShare),
 		RewardPerShare:  roundTo2(rewardPerShare),
 		RiskRewardRatio: roundTo2(rrRatio),
 		Shares:          shares,
-		TotalCost:       roundTo2(float64(shares) * vcp.EntryPrice),
+		TotalCost:       roundTo2(float64(shares) * gap.EntryPrice),
 		MaxLoss:         maxLoss,
 	}
 }

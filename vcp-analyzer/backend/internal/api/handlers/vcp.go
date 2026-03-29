@@ -13,40 +13,40 @@ import (
 	"vcp-analyzer/internal/service"
 )
 
-type VCPHandler struct {
+type GapHandler struct {
 	ds      *service.YahooFinance
-	scanner *service.VCPScanner
+	scanner *service.GapScanner
 }
 
-func NewVCPHandler(ds *service.YahooFinance, scanner *service.VCPScanner) *VCPHandler {
-	return &VCPHandler{ds: ds, scanner: scanner}
+func NewGapHandler(ds *service.YahooFinance, scanner *service.GapScanner) *GapHandler {
+	return &GapHandler{ds: ds, scanner: scanner}
 }
 
-// GET /api/vcp/scan
+// GET /api/gap/scan
 //
 // Query params:
 //
-//	minVolume  int     minimum daily trading volume in 張 (lots), default 1000
-//	minPrice   float64 minimum stock price in TWD, default 10
-//	concurrency int   max parallel Yahoo Finance requests, default 10
+//	minVolume   int     minimum daily trading volume in 張 (lots), default 500
+//	minPrice    float64 minimum stock price in TWD, default 10
+//	concurrency int     max parallel Yahoo Finance requests, default 10
 //
 // Flow:
 //  1. Fetch all TWSE + TPEx stocks via Open Data API
-//  2. Pre-filter by volume & price (already done in FetchAllStocks)
-//  3. Concurrently fetch Yahoo Finance history & run VCP scanner
+//  2. Pre-filter by volume & price
+//  3. Concurrently fetch Yahoo Finance history & run gap scanner
 //  4. Return ranked results
-func (h *VCPHandler) Scan(w http.ResponseWriter, r *http.Request) {
+func (h *GapHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	minVol := parseInt64(q.Get("minVolume"), 1000)   // 張/day
-	minPrice := parseFloat(q.Get("minPrice"), 10.0)  // TWD
-	concurrency := parseInt(q.Get("concurrency"), 10) // parallel requests
+	minVol := parseInt64(q.Get("minVolume"), 500)     // 張/day
+	minPrice := parseFloat(q.Get("minPrice"), 10.0)    // TWD
+	concurrency := parseInt(q.Get("concurrency"), 10)
 
 	log.Printf("[scan] fetching stock list (minVol=%d張 minPrice=%.0f)...", minVol, minPrice)
 	stocks := service.FetchAllStocks(minVol, minPrice)
 	log.Printf("[scan] %d stocks to analyse", len(stocks))
 
 	type result struct {
-		vcp *model.VCPAnalysis
+		gap *model.GapAnalysis
 	}
 
 	results := make(chan result, len(stocks))
@@ -66,11 +66,11 @@ func (h *VCPHandler) Scan(w http.ResponseWriter, r *http.Request) {
 				results <- result{}
 				return
 			}
-			vcp := h.scanner.Analyze(chart)
-			if vcp != nil && chineseName != "" {
-				vcp.Name = chineseName
+			gap := h.scanner.Analyze(chart)
+			if gap != nil && chineseName != "" {
+				gap.Name = chineseName
 			}
-			results <- result{vcp: vcp}
+			results <- result{gap: gap}
 		}(s.Symbol, s.Name)
 	}
 
@@ -79,25 +79,25 @@ func (h *VCPHandler) Scan(w http.ResponseWriter, r *http.Request) {
 		close(results)
 	}()
 
-	var vcpStocks []model.VCPAnalysis
+	var gapStocks []model.GapAnalysis
 	for r := range results {
-		if r.vcp != nil {
-			vcpStocks = append(vcpStocks, *r.vcp)
+		if r.gap != nil {
+			gapStocks = append(gapStocks, *r.gap)
 		}
 	}
 
-	service.SortByScore(vcpStocks)
+	service.SortByScore(gapStocks)
 
 	writeJSON(w, model.ScanResult{
-		Stocks:    vcpStocks,
+		Stocks:    gapStocks,
 		ScannedAt: time.Now().Format(time.RFC3339),
-		Total:     len(vcpStocks),
+		Total:     len(gapStocks),
 	})
 }
 
 // POST /api/stock/{symbol}/position
 // Body: { "maxLoss": 10000 }
-func (h *VCPHandler) CalcPosition(w http.ResponseWriter, r *http.Request) {
+func (h *GapHandler) CalcPosition(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -125,13 +125,13 @@ func (h *VCPHandler) CalcPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vcp := h.scanner.Analyze(chart)
-	if vcp == nil {
-		http.Error(w, "no VCP pattern detected", http.StatusNotFound)
+	gap := h.scanner.Analyze(chart)
+	if gap == nil {
+		http.Error(w, "no gap pattern detected", http.StatusNotFound)
 		return
 	}
 
-	writeJSON(w, service.CalcPosition(vcp, req.MaxLoss))
+	writeJSON(w, service.CalcPosition(gap, req.MaxLoss))
 }
 
 func extractSymbolFromPath(path string) string {

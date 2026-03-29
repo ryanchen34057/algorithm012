@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { getChart } from '../services/api';
-import { StockChartData, VCPAnalysis } from '../types';
+import { StockChartData, GapAnalysis } from '../types';
 import { useColors } from './ThemeContext';
 import StockChart from './StockChart';
 import RiskCalculator from './RiskCalculator';
 
 interface Props {
-  vcp: VCPAnalysis;
+  gap: GapAnalysis;
 }
 
-export default function StockRow({ vcp }: Props) {
+export default function StockRow({ gap }: Props) {
   const c = useColors();
   const [chart, setChart] = useState<StockChartData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,14 +17,17 @@ export default function StockRow({ vcp }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    getChart(vcp.symbol)
+    getChart(gap.symbol)
       .then(setChart)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [vcp.symbol]);
+  }, [gap.symbol]);
 
-  const code = vcp.symbol.replace(/\.(TW|TWO)$/, '');
-  const scoreColor = vcp.score >= 80 ? c.green : vcp.score >= 60 ? c.yellow : c.red;
+  const code = gap.symbol.replace(/\.(TW|TWO)$/, '');
+  const isLong = gap.direction === 'long';
+  const dirColor = isLong ? c.green : c.red;
+  const dirLabel = isLong ? 'Gap Up' : 'Gap Down';
+  const dirChinese = isLong ? '做多' : '做空';
 
   return (
     <div style={{ background: c.bgCard, borderRadius: 10, border: `1px solid ${c.border}`, overflow: 'hidden' }}>
@@ -38,31 +41,38 @@ export default function StockRow({ vcp }: Props) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontWeight: 800, fontSize: 20, color: c.text }}>{code}</span>
-          <span style={{ color: c.textSecondary, fontSize: 15 }}>{vcp.name}</span>
+          <span style={{ color: c.textSecondary, fontSize: 15 }}>{gap.name}</span>
           <span style={{ color: c.textMuted, fontSize: 13 }}>
-            ${vcp.currentPrice}
+            ${gap.currentPrice}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {/* Contraction summary */}
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            {(vcp.contractions ?? []).map((con) => (
-              <span key={con.index} style={{
-                background: scoreColor + '22',
-                color: scoreColor,
-                borderRadius: 4,
-                padding: '2px 6px',
-                fontSize: 11,
-                fontWeight: 600,
-              }}>
-                {con.depth.toFixed(1)}%
-              </span>
-            ))}
-          </div>
+          {/* Direction badge */}
+          <span style={{
+            background: dirColor + '22',
+            color: dirColor,
+            borderRadius: 4,
+            padding: '3px 10px',
+            fontSize: 13,
+            fontWeight: 700,
+          }}>
+            {dirLabel} {dirChinese}
+          </span>
+          {/* Gap percent */}
+          <span style={{
+            background: dirColor + '18',
+            color: dirColor,
+            borderRadius: 4,
+            padding: '2px 8px',
+            fontSize: 13,
+            fontWeight: 600,
+          }}>
+            {gap.gapPercent > 0 ? '+' : ''}{gap.gapPercent.toFixed(1)}%
+          </span>
           {/* Score badge */}
           <div style={{
-            background: scoreColor + '18',
-            color: scoreColor,
+            background: (gap.score >= 70 ? c.green : gap.score >= 50 ? c.yellow : c.red) + '18',
+            color: gap.score >= 70 ? c.green : gap.score >= 50 ? c.yellow : c.red,
             borderRadius: 6,
             padding: '4px 12px',
             fontWeight: 800,
@@ -70,7 +80,7 @@ export default function StockRow({ vcp }: Props) {
             minWidth: 50,
             textAlign: 'center',
           }}>
-            {vcp.score.toFixed(0)}
+            {gap.score.toFixed(0)}
           </div>
           {/* Expand arrow */}
           <span style={{ color: c.textMuted, fontSize: 16, transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'rotate(0)' }}>
@@ -90,7 +100,7 @@ export default function StockRow({ vcp }: Props) {
             載入線圖中...
           </div>
         ) : chart ? (
-          <StockChart chart={chart} vcp={vcp} />
+          <StockChart chart={chart} gap={gap} />
         ) : (
           <div style={{ color: c.textMuted, padding: '40px 0', textAlign: 'center', fontSize: 14 }}>
             無法載入線圖
@@ -99,23 +109,26 @@ export default function StockRow({ vcp }: Props) {
 
         {/* Trade info bar */}
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-          <InfoChip label="進場點" value={`$${vcp.entryPrice}`} color={c.blue} />
-          <InfoChip label="停損點" value={`$${vcp.stopLoss}`} color={c.red} />
-          <InfoChip label="目標價" value={`$${vcp.target}`} color={c.green} />
-          <InfoChip label="Pivot" value={`$${vcp.pivotPrice}`} />
-          <InfoChip label="Stage 2" value={vcp.stage2 ? 'Yes' : 'No'} />
+          <InfoChip label="方向" value={`${dirLabel} ${dirChinese}`} color={dirColor} />
+          <InfoChip label="跳空幅度" value={`${gap.gapPercent > 0 ? '+' : ''}${gap.gapPercent}%`} color={dirColor} />
+          <InfoChip label="進場點" value={`$${gap.entryPrice}`} color={c.blue} />
+          <InfoChip label="停損點" value={`$${gap.stopLoss}`} color={c.red} />
+          <InfoChip label="目標價" value={`$${gap.target}`} color={c.green} />
+          <InfoChip label="ADV20" value={`${gap.adv20.toLocaleString()} 張`} />
+          <InfoChip label="MA20" value={`$${gap.ma20}`} />
+          <InfoChip label="MA200" value={`$${gap.ma200}`} />
         </div>
 
-        {/* Expandable: risk calculator + contraction table */}
+        {/* Expandable: risk calculator + gap details */}
         {expanded && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <RiskCalculator vcp={vcp} />
+            <RiskCalculator gap={gap} />
 
-            {/* Contraction table */}
+            {/* Gap detail table */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['收縮', '高點日期', '高點價格', '低點日期', '低點價格', '回檔幅度', '期間均量'].map((h) => (
+                  {['項目', '數值'].map((h) => (
                     <th key={h} style={{
                       background: c.bgInput, color: c.textMuted, fontSize: 11,
                       textTransform: 'uppercase', padding: '8px 12px', textAlign: 'left',
@@ -126,28 +139,34 @@ export default function StockRow({ vcp }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {(vcp.contractions ?? []).map((con) => (
-                  <tr key={con.index} style={{ borderBottom: `1px solid ${c.border}` }}>
-                    <td style={tdStyle(c)}>C{con.index}</td>
-                    <td style={tdStyle(c)}>{con.highDate}</td>
-                    <td style={tdStyle(c)}>${con.highPrice}</td>
-                    <td style={tdStyle(c)}>{con.lowDate}</td>
-                    <td style={tdStyle(c)}>${con.lowPrice}</td>
-                    <td style={{
-                      ...tdStyle(c), fontWeight: 700,
-                      color: con.depth <= 6 ? c.green : con.depth <= 12 ? c.yellow : c.red,
-                    }}>
-                      {con.depth.toFixed(1)}%
-                    </td>
-                    <td style={tdStyle(c)}>{con.avgVolume.toLocaleString()}</td>
-                  </tr>
-                ))}
+                <DetailRow label="昨日開盤" value={`$${gap.yesterdayOpen}`} c={c} />
+                <DetailRow label="昨日收盤" value={`$${gap.yesterdayClose}`} c={c} />
+                <DetailRow label="昨日最高" value={`$${gap.yesterdayHigh}`} c={c} />
+                <DetailRow label="昨日最低" value={`$${gap.yesterdayLow}`} c={c} />
+                <DetailRow label="今日開盤" value={`$${gap.todayOpen}`} c={c} />
+                <DetailRow label="今日收盤" value={`$${gap.todayClose}`} c={c} />
+                <DetailRow label="跳空幅度" value={`${gap.gapPercent > 0 ? '+' : ''}${gap.gapPercent}%`} c={c} highlight={dirColor} />
+                <DetailRow label="當日成交量" value={`${(gap.todayVolume / 1000).toLocaleString()} 張`} c={c} />
+                <DetailRow label="20日均量" value={`${gap.adv20.toLocaleString()} 張`} c={c} />
               </tbody>
             </table>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function DetailRow({ label, value, c, highlight }: {
+  label: string; value: string;
+  c: ReturnType<typeof useColors>;
+  highlight?: string;
+}) {
+  return (
+    <tr style={{ borderBottom: `1px solid ${c.border}` }}>
+      <td style={{ padding: '8px 12px', color: c.textMuted, fontSize: 13 }}>{label}</td>
+      <td style={{ padding: '8px 12px', color: highlight ?? c.textSecondary, fontSize: 13, fontWeight: highlight ? 700 : 400 }}>{value}</td>
+    </tr>
   );
 }
 
@@ -159,8 +178,4 @@ function InfoChip({ label, value, color }: { label: string; value: string; color
       <span style={{ fontWeight: 700, fontSize: 15, color: color ?? c.text }}>{value}</span>
     </div>
   );
-}
-
-function tdStyle(c: ReturnType<typeof useColors>): React.CSSProperties {
-  return { padding: '8px 12px', color: c.textSecondary, fontSize: 13 };
 }

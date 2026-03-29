@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getChart, getVCP } from '../services/api';
-import { StockChartData, VCPAnalysis } from '../types';
+import { getChart, getGap } from '../services/api';
+import { StockChartData, GapAnalysis } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import StockChart from '../components/StockChart';
-import VCPScoreCard from '../components/VCPScoreCard';
+import GapInfoCard from '../components/VCPScoreCard';
 import RiskCalculator from '../components/RiskCalculator';
 
 export default function StockDetail() {
@@ -14,7 +14,7 @@ export default function StockDetail() {
   const c = useColors();
 
   const [chart, setChart] = useState<StockChartData | null>(null);
-  const [vcp, setVcp] = useState<VCPAnalysis | null>(null);
+  const [gap, setGap] = useState<GapAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -25,10 +25,10 @@ export default function StockDetail() {
     setLoading(true);
     setError('');
 
-    Promise.all([getChart(decoded), getVCP(decoded)])
-      .then(([chartData, vcpData]) => {
+    Promise.all([getChart(decoded), getGap(decoded)])
+      .then(([chartData, gapData]) => {
         setChart(chartData);
-        setVcp(vcpData);
+        setGap(gapData);
       })
       .catch(() => setError('無法載入股票資料，請確認代號是否正確。'))
       .finally(() => setLoading(false));
@@ -53,9 +53,11 @@ export default function StockDetail() {
     );
   }
 
-  if (!chart || !vcp) return null;
+  if (!chart || !gap) return null;
 
-  const code = vcp.symbol.replace(/\.(TW|TWO)$/, '');
+  const code = gap.symbol.replace(/\.(TW|TWO)$/, '');
+  const isLong = gap.direction === 'long';
+  const dirColor = isLong ? c.green : c.red;
 
   return (
     <div style={{ ...S.page, background: c.bg }}>
@@ -70,15 +72,22 @@ export default function StockDetail() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ margin: 0, color: c.text, fontSize: 24, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 12 }}>
           {code}
-          <span style={{ fontSize: 16, color: c.textMuted, fontWeight: 400 }}>{vcp.name}</span>
+          <span style={{ fontSize: 16, color: c.textMuted, fontWeight: 400 }}>{gap.name}</span>
+          <span style={{
+            background: dirColor + '22', color: dirColor,
+            borderRadius: 4, padding: '3px 10px', fontSize: 14, fontWeight: 700,
+          }}>
+            {isLong ? 'Gap Up 做多' : 'Gap Down 做空'}
+          </span>
         </h2>
-        <div style={{ fontSize: 28, fontWeight: 800, color: c.green }}>${vcp.currentPrice}</div>
+        <div style={{ fontSize: 28, fontWeight: 800, color: dirColor }}>${gap.currentPrice}</div>
       </div>
 
       {/* Chart */}
       <div style={{ background: c.chartBg, borderRadius: 8, overflow: 'hidden', padding: 16, display: 'flex', flexDirection: 'column', gap: 8, border: `1px solid ${c.border}` }}>
-        <StockChart chart={chart} vcp={vcp} />
+        <StockChart chart={chart} gap={gap} />
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', paddingTop: 8 }}>
+          <Legend color="#22d3ee" label="MA20" />
           <Legend color="#f59e0b" label="MA50" />
           <Legend color="#a78bfa" label="MA150" />
           <Legend color="#f472b6" label="MA200" />
@@ -88,23 +97,23 @@ export default function StockDetail() {
         </div>
       </div>
 
-      {/* VCP + Risk calculator */}
+      {/* Gap info + Risk calculator */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 340px' }}>
-          <VCPScoreCard vcp={vcp} />
+          <GapInfoCard gap={gap} />
         </div>
         <div style={{ flex: '1 1 340px' }}>
-          <RiskCalculator vcp={vcp} />
+          <RiskCalculator gap={gap} />
         </div>
       </div>
 
-      {/* Contraction table */}
+      {/* Gap detail table */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <h3 style={{ margin: 0, color: c.text, fontSize: 16, fontWeight: 700 }}>收縮詳情</h3>
+        <h3 style={{ margin: 0, color: c.text, fontSize: 16, fontWeight: 700 }}>跳空詳情</h3>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: c.bgCard, borderRadius: 8, overflow: 'hidden' }}>
           <thead>
             <tr>
-              {['收縮', '高點日期', '高點價格', '低點日期', '低點價格', '回檔幅度', '期間均量'].map((h) => (
+              {['項目', '數值'].map((h) => (
                 <th key={h} style={{ background: c.bgInput, color: c.textMuted, fontSize: 12, textTransform: 'uppercase', padding: '10px 16px', textAlign: 'left' }}>
                   {h}
                 </th>
@@ -112,20 +121,22 @@ export default function StockDetail() {
             </tr>
           </thead>
           <tbody>
-            {vcp.contractions.map((con) => (
-              <tr key={con.index} style={{ borderBottom: `1px solid ${c.border}` }}>
-                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>C{con.index}</td>
-                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>{con.highDate}</td>
-                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>${con.highPrice}</td>
-                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>{con.lowDate}</td>
-                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>${con.lowPrice}</td>
-                <td style={{
-                  padding: '10px 16px', fontSize: 14, fontWeight: 700,
-                  color: con.depth <= 6 ? c.green : con.depth <= 12 ? c.yellow : c.red,
-                }}>
-                  {con.depth.toFixed(1)}%
-                </td>
-                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>{con.avgVolume.toLocaleString()}</td>
+            {[
+              ['昨日開盤', `$${gap.yesterdayOpen}`],
+              ['昨日收盤', `$${gap.yesterdayClose}`],
+              ['昨日最高', `$${gap.yesterdayHigh}`],
+              ['昨日最低', `$${gap.yesterdayLow}`],
+              ['今日開盤', `$${gap.todayOpen}`],
+              ['今日收盤', `$${gap.todayClose}`],
+              ['跳空幅度', `${gap.gapPercent > 0 ? '+' : ''}${gap.gapPercent}%`],
+              ['當日成交量', `${(gap.todayVolume / 1000).toLocaleString()} 張`],
+              ['20日均量', `${gap.adv20.toLocaleString()} 張`],
+              ['MA20', `$${gap.ma20}`],
+              ['MA200', `$${gap.ma200}`],
+            ].map(([label, value]) => (
+              <tr key={label} style={{ borderBottom: `1px solid ${c.border}` }}>
+                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>{label}</td>
+                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>{value}</td>
               </tr>
             ))}
           </tbody>

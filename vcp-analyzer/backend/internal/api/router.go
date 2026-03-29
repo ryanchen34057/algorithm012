@@ -24,25 +24,25 @@ func corsMiddleware(next http.Handler) http.Handler {
 // NewRouter wires all HTTP routes and returns the root handler.
 func NewRouter() http.Handler {
 	ds := service.NewYahooFinance()
-	scanner := service.NewVCPScanner()
+	scanner := service.NewGapScanner()
 
 	stockH := handlers.NewStockHandler(ds, scanner)
-	vcpH := handlers.NewVCPHandler(ds, scanner)
+	gapH := handlers.NewGapHandler(ds, scanner)
 
 	mux := http.NewServeMux()
 
-	// VCP scan (scans full watch-list)
-	mux.HandleFunc("/api/vcp/scan", vcpH.Scan)
+	// Gap scan (scans full market)
+	mux.HandleFunc("/api/gap/scan", gapH.Scan)
 
-	// Per-stock chart data
+	// Per-stock endpoints
 	mux.HandleFunc("/api/stock/", func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case hasSuffix(r.URL.Path, "/chart"):
 			stockH.GetChart(w, r)
-		case hasSuffix(r.URL.Path, "/vcp"):
-			stockH.GetVCP(w, r)
+		case hasSuffix(r.URL.Path, "/gap"):
+			stockH.GetGap(w, r)
 		case hasSuffix(r.URL.Path, "/position"):
-			vcpH.CalcPosition(w, r)
+			gapH.CalcPosition(w, r)
 		default:
 			http.NotFound(w, r)
 		}

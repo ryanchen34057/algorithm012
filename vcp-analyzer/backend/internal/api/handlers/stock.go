@@ -10,10 +10,10 @@ import (
 
 type StockHandler struct {
 	ds      *service.YahooFinance
-	scanner *service.VCPScanner
+	scanner *service.GapScanner
 }
 
-func NewStockHandler(ds *service.YahooFinance, scanner *service.VCPScanner) *StockHandler {
+func NewStockHandler(ds *service.YahooFinance, scanner *service.GapScanner) *StockHandler {
 	return &StockHandler{ds: ds, scanner: scanner}
 }
 
@@ -40,10 +40,10 @@ func (h *StockHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, chart)
 }
 
-// GET /api/stock/{symbol}/vcp
-// Returns VCP analysis for a single stock
-func (h *StockHandler) GetVCP(w http.ResponseWriter, r *http.Request) {
-	symbol := extractSymbol(r.URL.Path, "/api/stock/", "/vcp")
+// GET /api/stock/{symbol}/gap
+// Returns gap analysis for a single stock
+func (h *StockHandler) GetGap(w http.ResponseWriter, r *http.Request) {
+	symbol := extractSymbol(r.URL.Path, "/api/stock/", "/gap")
 	if symbol == "" {
 		http.Error(w, "missing symbol", http.StatusBadRequest)
 		return
@@ -55,17 +55,17 @@ func (h *StockHandler) GetVCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vcp := h.scanner.Analyze(chart)
-	if vcp == nil {
-		http.Error(w, "no VCP pattern detected", http.StatusNotFound)
+	gap := h.scanner.Analyze(chart)
+	if gap == nil {
+		http.Error(w, "no gap pattern detected", http.StatusNotFound)
 		return
 	}
 
 	if cn := service.GetChineseName(symbol); cn != "" {
-		vcp.Name = cn
+		gap.Name = cn
 	}
 
-	writeJSON(w, vcp)
+	writeJSON(w, gap)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
