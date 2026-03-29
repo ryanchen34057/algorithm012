@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"vcp-analyzer/internal/model"
@@ -29,9 +31,9 @@ type yahooResponse struct {
 	Chart struct {
 		Result []struct {
 			Meta struct {
-				Symbol           string  `json:"symbol"`
+				Symbol             string  `json:"symbol"`
 				RegularMarketPrice float64 `json:"regularMarketPrice"`
-				ShortName        string  `json:"shortName"`
+				ShortName          string  `json:"shortName"`
 			} `json:"meta"`
 			Timestamp  []int64 `json:"timestamp"`
 			Indicators struct {
@@ -62,7 +64,6 @@ func (yf *YahooFinance) FetchHistory(symbol string) (*model.StockChartData, erro
 	if err != nil {
 		return nil, err
 	}
-	// Yahoo Finance requires a User-Agent header
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 
 	resp, err := yf.client.Do(req)
@@ -130,11 +131,125 @@ func (yf *YahooFinance) FetchHistory(symbol string) (*model.StockChartData, erro
 	}, nil
 }
 
-// TWSEStockList returns a curated list of major Taiwan stock symbols.
-// In production this could be fetched from TWSE's listed companies API.
-func TWSEStockList() []model.StockInfo {
+// ── 全市場股票清單（動態從 TWSE / TPEx 抓取）─────────────────────────────────
+
+// FetchAllStocks fetches all TWSE + TPEx listed stocks and pre-filters by:
+//   - minVolumeLots: minimum average daily trading volume in 張 (lots of 1000 shares)
+//   - minPrice: minimum closing price in TWD (filter out penny stocks)
+//
+// Falls back to the hardcoded list if any API call fails.
+func FetchAllStocks(minVolumeLots int64, minPrice float64) []model.StockInfo {
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	twse, err := fetchTWSEList(client, minVolumeLots, minPrice)
+	if err != nil {
+		log.Printf("[TWSE] fetch failed: %v — using fallback list", err)
+		return fallbackStockList()
+	}
+
+	tpex, err := fetchTPExList(client, minVolumeLots, minPrice)
+	if err != nil {
+		log.Printf("[TPEx] fetch failed: %v — OTC stocks skipped", err)
+	}
+
+	all := append(twse, tpex...)
+	log.Printf("[stock list] TWSE=%d TPEx=%d total=%d (minVol=%d張 minPrice=%.0f)",
+		len(twse), len(tpex), len(all), minVolumeLots, minPrice)
+	return all
+}
+
+// ── TWSE（上市）────────────────────────────────────────────────────────────────
+// 使用 TWSE Open Data API 取得今日所有上市股票交易摘要
+// https://opendata.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL
+type twseRow struct {
+	Code         string `json:"Code"`
+	Name         string `json:"Name"`
+	TradeVolume  string `json:"TradeVolume"`  // 成交股數 (shares)
+	ClosingPrice string `json:"ClosingPrice"` // 收盤價
+}
+
+func fetchTWSEList(client *http.Client, minVolumeLots int64, minPrice float64) ([]model.StockInfo, error) {
+	url := "https://opendata.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
+	body, err := getJSON(client, url)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []twseRow
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, fmt.Errorf("TWSE parse: %w", err)
+	}
+
+	var result []model.StockInfo
+	for _, r := range rows {
+		// Filter: only 4-digit numeric codes (exclude ETF, warrant, etc.)
+		if !is4DigitCode(r.Code) {
+			continue
+		}
+		// Filter by closing price
+		price := parseNumber(r.ClosingPrice)
+		if price < minPrice {
+			continue
+		}
+		// Filter by volume: TradeVolume is in shares; divide by 1000 for 張
+		volShares := int64(parseNumber(r.TradeVolume))
+		if volShares/1000 < minVolumeLots {
+			continue
+		}
+		result = append(result, model.StockInfo{
+			Symbol: r.Code + ".TW",
+			Name:   r.Name,
+		})
+	}
+	return result, nil
+}
+
+// ── TPEx（上櫃）───────────────────────────────────────────────────────────────
+// 使用 TPEx OpenAPI 取得今日所有上櫃股票
+// https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes
+type tpexRow struct {
+	SecuritiesCompanyCode string `json:"SecuritiesCompanyCode"`
+	CompanyName           string `json:"CompanyName"`
+	Close                 string `json:"Close"`
+	TradingShares         string `json:"TradingShares"` // 成交股數
+}
+
+func fetchTPExList(client *http.Client, minVolumeLots int64, minPrice float64) ([]model.StockInfo, error) {
+	url := "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+	body, err := getJSON(client, url)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []tpexRow
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, fmt.Errorf("TPEx parse: %w", err)
+	}
+
+	var result []model.StockInfo
+	for _, r := range rows {
+		if !is4DigitCode(r.SecuritiesCompanyCode) {
+			continue
+		}
+		price := parseNumber(r.Close)
+		if price < minPrice {
+			continue
+		}
+		volShares := int64(parseNumber(r.TradingShares))
+		if volShares/1000 < minVolumeLots {
+			continue
+		}
+		result = append(result, model.StockInfo{
+			Symbol: r.SecuritiesCompanyCode + ".TWO",
+			Name:   r.CompanyName,
+		})
+	}
+	return result, nil
+}
+
+// ── fallback list（API 掛掉時用）─────────────────────────────────────────────
+func fallbackStockList() []model.StockInfo {
 	return []model.StockInfo{
-		// TWSE heavyweights
 		{Symbol: "2330.TW", Name: "台積電"},
 		{Symbol: "2317.TW", Name: "鴻海"},
 		{Symbol: "2454.TW", Name: "聯發科"},
@@ -154,21 +269,51 @@ func TWSEStockList() []model.StockInfo {
 		{Symbol: "2395.TW", Name: "研華"},
 		{Symbol: "3034.TW", Name: "聯詠"},
 		{Symbol: "2379.TW", Name: "瑞昱"},
-		{Symbol: "2408.TW", Name: "南亞科"},
 		{Symbol: "2345.TW", Name: "智邦"},
 		{Symbol: "3008.TW", Name: "大立光"},
-		{Symbol: "2327.TW", Name: "國巨"},
-		{Symbol: "4904.TW", Name: "遠傳"},
-		{Symbol: "2207.TW", Name: "和泰車"},
-		// OTC stars
 		{Symbol: "6415.TWO", Name: "矽力-KY"},
 		{Symbol: "3661.TWO", Name: "世芯-KY"},
-		{Symbol: "6547.TWO", Name: "高端疫苗"},
 		{Symbol: "3533.TWO", Name: "嘉澤"},
 	}
 }
 
-// ---- helpers ----------------------------------------------------------------
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+func getJSON(client *http.Client, url string) ([]byte, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
+
+// is4DigitCode checks if a stock code is exactly 4 numeric digits (普通股).
+// Excludes: ETF (4+ digits with letters), warrants, preferred shares, etc.
+func is4DigitCode(code string) bool {
+	if len(code) != 4 {
+		return false
+	}
+	for _, c := range code {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// parseNumber parses a number string that may contain commas (e.g. "1,234,567").
+func parseNumber(s string) float64 {
+	s = strings.ReplaceAll(s, ",", "")
+	s = strings.TrimSpace(s)
+	v, _ := strconv.ParseFloat(s, 64)
+	return v
+}
 
 func calcMA(closes []float64, period int) []float64 {
 	result := make([]float64, len(closes))
