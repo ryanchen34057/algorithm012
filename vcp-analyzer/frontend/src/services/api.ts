@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ScanResult, StockChartData, GapAnalysis, PositionResult, BreakoutScanResult, VolumeCondition, PatternType, PeakAttackScanResult } from '../types';
+import { ScanResult, StockChartData, GapAnalysis, PositionResult, BreakoutScanResult, VolumeCondition, PatternType, PeakAttackScanResult, SuperPerfScanResult } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8090';
 
@@ -66,6 +66,27 @@ export const scanPeakAttack = (params: PeakAttackScanParams = {}): Promise<PeakA
     if (val !== undefined) p.set(key, String(val));
   }
   return api.get<PeakAttackScanResult>(`/api/peakattack/scan?${p.toString()}`).then(r => r.data);
+};
+
+export type GainPeriod = '1m' | '3m' | '6m' | 'ytd';
+export type MarketFilter = 'all' | 'listed' | 'otc';
+
+export interface SuperPerfScanParams {
+  minPrice?: number;
+  maxPrice?: number;
+  minVolume?: number;
+  gainPeriod?: GainPeriod;
+  minGainPct?: number;
+  marketFilter?: MarketFilter;
+  concurrency?: number;
+}
+
+export const scanSuperPerf = (params: SuperPerfScanParams = {}): Promise<SuperPerfScanResult> => {
+  const p = new URLSearchParams();
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined) p.set(key, String(val));
+  }
+  return api.get<SuperPerfScanResult>(`/api/superperf/scan?${p.toString()}`).then(r => r.data);
 };
 
 export const getChart = (symbol: string): Promise<StockChartData> =>

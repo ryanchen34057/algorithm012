@@ -137,6 +137,56 @@ export interface PeakAttackScanResult {
   scanned: number;
 }
 
+// ── Super Performance Scanner (超級績效) ──
+
+export interface SuperPerfAnalysis {
+  symbol: string;
+  name: string;
+  market: string;
+  industry: string;
+  conceptTag: string;
+  currentPrice: number;
+  gain1m: number;
+  gain3m: number;
+  gain6m: number;
+  gainYtd: number;
+  vcpScore: number;
+  trendScore: number;
+  contractionScore: number;
+  volDryUpScore: number;
+  pivotScore: number;
+  rsScore: number;
+  ma50: number;
+  ma150: number;
+  ma200: number;
+  high52w: number;
+  low52w: number;
+  adv20: number;
+  pivotPrice: number;
+  stopLoss: number;
+  entryPrice: number;
+  target: number;
+  targetLabel: string;
+  rewardRisk: number;
+  todayVolume: number;
+}
+
+export interface IndustryHeat {
+  industry: string;
+  avgGain1m: number;
+  avgGain3m: number;
+  stockCount: number;
+  topStocks: string[];
+}
+
+export interface SuperPerfScanResult {
+  stocks: SuperPerfAnalysis[];
+  industries: IndustryHeat[];
+  scannedAt: string;
+  total: number;
+  scanned: number;
+}
+
 export interface PositionResult {
   symbol: string;
   entryPrice: number;

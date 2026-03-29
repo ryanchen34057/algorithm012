@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { scanGap, scanBreakout, scanPeakAttack } from '../services/api';
-import { GapAnalysis, BreakoutAnalysis, PeakAttackAnalysis, PatternType, VolumeCondition } from '../types';
+import { scanGap, scanBreakout, scanPeakAttack, scanSuperPerf, GainPeriod, MarketFilter } from '../services/api';
+import { GapAnalysis, BreakoutAnalysis, PeakAttackAnalysis, SuperPerfAnalysis, IndustryHeat, PatternType, VolumeCondition } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import StockRow from '../components/StockRow';
 import BreakoutRow from '../components/BreakoutRow';
 import PeakAttackRow from '../components/PeakAttackRow';
+import SuperPerfRow from '../components/SuperPerfRow';
+import IndustryHeatmap from '../components/IndustryHeatmap';
 
 // ── Scanner Tabs ──
-type ScannerTab = 'gap' | 'breakout' | 'peakattack';
+type ScannerTab = 'gap' | 'breakout' | 'peakattack' | 'superperf';
 
 // ── Gap Scanner Types ──
 type DirectionFilter = 'all' | 'long' | 'short';
@@ -68,6 +70,21 @@ const PEAK_ATTACK_DEFAULTS: PeakAttackFilter = {
   minAttackCount: 3, minVolRatio: 1.0,
 };
 
+// ── Super Performance Scanner Types ──
+interface SuperPerfFilter {
+  minPrice: number;
+  maxPrice: number;
+  minVolume: number;
+  gainPeriod: GainPeriod;
+  minGainPct: number;
+  marketFilter: MarketFilter;
+}
+
+const SUPERPERF_DEFAULTS: SuperPerfFilter = {
+  minPrice: 10, maxPrice: 9999, minVolume: 200,
+  gainPeriod: '3m', minGainPct: 0, marketFilter: 'all',
+};
+
 export default function Dashboard() {
   const c = useColors();
   const [tab, setTab] = useState<ScannerTab>('gap');
@@ -83,6 +100,11 @@ export default function Dashboard() {
   // ── Peak Attack state ──
   const [peakAttackStocks, setPeakAttackStocks] = useState<PeakAttackAnalysis[]>([]);
   const [peakAttackFilter, setPeakAttackFilter] = useState<PeakAttackFilter>({ ...PEAK_ATTACK_DEFAULTS });
+
+  // ── Super Perf state ──
+  const [superPerfStocks, setSuperPerfStocks] = useState<SuperPerfAnalysis[]>([]);
+  const [superPerfIndustries, setSuperPerfIndustries] = useState<IndustryHeat[]>([]);
+  const [superPerfFilter, setSuperPerfFilter] = useState<SuperPerfFilter>({ ...SUPERPERF_DEFAULTS });
 
   // ── Shared state ──
   const [loading, setLoading] = useState(false);
@@ -117,7 +139,7 @@ export default function Dashboard() {
         setBreakoutStocks(result.stocks ?? []);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
-      } else {
+      } else if (tab === 'peakattack') {
         const result = await scanPeakAttack({
           minPrice: peakAttackFilter.minPrice, maxPrice: peakAttackFilter.maxPrice,
           minVolume: peakAttackFilter.minVolume, minTodayVol: peakAttackFilter.minTodayVol,
@@ -126,6 +148,16 @@ export default function Dashboard() {
           minVolRatio: peakAttackFilter.minVolRatio,
         });
         setPeakAttackStocks(result.stocks ?? []);
+        setScannedAt(result.scannedAt);
+        setTotalScanned(result.scanned);
+      } else {
+        const result = await scanSuperPerf({
+          minPrice: superPerfFilter.minPrice, maxPrice: superPerfFilter.maxPrice,
+          minVolume: superPerfFilter.minVolume, gainPeriod: superPerfFilter.gainPeriod,
+          minGainPct: superPerfFilter.minGainPct, marketFilter: superPerfFilter.marketFilter,
+        });
+        setSuperPerfStocks(result.stocks ?? []);
+        setSuperPerfIndustries(result.industries ?? []);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
       }
@@ -140,7 +172,8 @@ export default function Dashboard() {
   const handleReset = () => {
     if (tab === 'gap') setGapFilter({ ...GAP_DEFAULTS });
     else if (tab === 'breakout') setBreakoutFilter({ ...BREAKOUT_DEFAULTS });
-    else setPeakAttackFilter({ ...PEAK_ATTACK_DEFAULTS });
+    else if (tab === 'peakattack') setPeakAttackFilter({ ...PEAK_ATTACK_DEFAULTS });
+    else setSuperPerfFilter({ ...SUPERPERF_DEFAULTS });
   };
 
   return (
@@ -150,7 +183,7 @@ export default function Dashboard() {
         <div>
           <h1 style={{ ...S.title, color: c.text }}>台股智慧掃描系統</h1>
           <p style={{ ...S.subtitle, color: c.textMuted }}>
-            震撼跳空 · 突破前高 · 攻頂突破
+            震撼跳空 · 突破前高 · 攻頂突破 · 超級績效
           </p>
         </div>
         <ThemeToggle />
@@ -158,7 +191,7 @@ export default function Dashboard() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, background: c.bgCard, borderRadius: 8, padding: 4, border: `1px solid ${c.border}` }}>
-        {([['gap', '震撼跳空'], ['breakout', '突破前高'], ['peakattack', '攻頂突破']] as const).map(([key, label]) => (
+        {([['gap', '震撼跳空'], ['breakout', '突破前高'], ['peakattack', '攻頂突破'], ['superperf', '超級績效']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -185,6 +218,9 @@ export default function Dashboard() {
       {tab === 'peakattack' && (
         <PeakAttackFilterBar filter={peakAttackFilter} setFilter={setPeakAttackFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
       )}
+      {tab === 'superperf' && (
+        <SuperPerfFilterBar filter={superPerfFilter} setFilter={setSuperPerfFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
+      )}
 
       {/* Error */}
       {error && (
@@ -207,6 +243,9 @@ export default function Dashboard() {
       )}
       {tab === 'peakattack' && (
         <PeakAttackResults stocks={peakAttackStocks} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
+      )}
+      {tab === 'superperf' && (
+        <SuperPerfResults stocks={superPerfStocks} industries={superPerfIndustries} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
       )}
     </div>
   );
@@ -492,6 +531,83 @@ function PeakAttackResults({ stocks, loading, scannedAt, totalScanned }: {
       </div>
 
       <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合攻頂突破條件的股票。" />
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUPER PERFORMANCE SCANNER (超級績效)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function SuperPerfFilterBar({ filter, setFilter, loading, onScan, onReset }: {
+  filter: SuperPerfFilter; setFilter: React.Dispatch<React.SetStateAction<SuperPerfFilter>>;
+  loading: boolean; onScan: () => void; onReset: () => void;
+}) {
+  const c = useColors();
+  return (
+    <>
+      <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>價格 & 成交量</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput label="最低股價（元）" value={filter.minPrice} onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))} hint="建議 10+" />
+            <FilterInput label="最高股價（元）" value={filter.maxPrice} onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))} hint="預設不限" />
+            <FilterInput label="最低日均量（張）" value={filter.minVolume} onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))} hint="ADV20, 建議 200+" />
+          </div>
+        </div>
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>排序 & 篩選</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <ButtonGroup label="排序漲幅" value={filter.gainPeriod} options={[['1m', '近1月'], ['3m', '近3月'], ['6m', '近6月'], ['ytd', '今年至今']]} onChange={(v) => setFilter((f) => ({ ...f, gainPeriod: v as GainPeriod }))} />
+            <ButtonGroup label="市場" value={filter.marketFilter} options={[['all', '全部'], ['listed', '上市'], ['otc', '上櫃']]} onChange={(v) => setFilter((f) => ({ ...f, marketFilter: v as MarketFilter }))} />
+            <FilterInput label="最低漲幅（%）" value={filter.minGainPct} onChange={(v) => setFilter((f) => ({ ...f, minGainPct: v }))} hint="排序週期的最低漲幅" step={1} />
+          </div>
+        </div>
+        <ScanActions loading={loading} onScan={onScan} onReset={onReset} />
+      </div>
+
+      <div style={S.legend}>
+        <LegendItem color="#ef4444" label="VCP 高分（接近突破）" />
+        <LegendItem color="#f59e0b" label="VCP 中分（整理中）" />
+        <LegendItem color="#3b82f6" label="相對強度排名" />
+      </div>
+
+      <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
+        <strong style={{ color: c.text }}>超級績效策略說明：</strong><br />
+        依{filter.gainPeriod === '1m' ? '近1月' : filter.gainPeriod === '3m' ? '近3月' : filter.gainPeriod === '6m' ? '近6月' : '今年至今'}漲幅排序所有台股，再以 VCP（波動收縮）五維度評分：<br />
+        趨勢(20) + 波動收縮(30) + 量縮(20) + 接近樞紐(15) + 相對強度(15) = 100 分<br />
+        <span style={{ color: c.textMuted }}>每檔股票標示產業分類與概念股標籤，上方顯示產業熱度排行</span>
+      </div>
+    </>
+  );
+}
+
+function SuperPerfResults({ stocks, industries, loading, scannedAt, totalScanned }: {
+  stocks: SuperPerfAnalysis[]; industries: IndustryHeat[];
+  loading: boolean; scannedAt: string; totalScanned: number;
+}) {
+  const c = useColors();
+  return (
+    <>
+      {scannedAt && !loading && (
+        <div style={{ color: c.textDim, fontSize: 13 }}>
+          掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
+          &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
+          <strong style={{ color: c.text }}>{stocks.length}</strong> 支超級績效股
+          {industries.length > 0 && (
+            <span style={{ color: c.textMuted }}>（涵蓋 {industries.length} 個產業）</span>
+          )}
+        </div>
+      )}
+
+      {/* Industry Heatmap at top */}
+      {industries.length > 0 && <IndustryHeatmap industries={industries} />}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {stocks.map((s) => <SuperPerfRow key={s.symbol} stock={s} />)}
+      </div>
+
+      <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合超級績效條件的股票。" />
     </>
   );
 }
