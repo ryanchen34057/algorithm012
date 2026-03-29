@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { scanGap, scanBreakout } from '../services/api';
-import { GapAnalysis, BreakoutAnalysis, PatternType, VolumeCondition } from '../types';
+import { scanGap, scanBreakout, scanPeakAttack } from '../services/api';
+import { GapAnalysis, BreakoutAnalysis, PeakAttackAnalysis, PatternType, VolumeCondition } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import StockRow from '../components/StockRow';
 import BreakoutRow from '../components/BreakoutRow';
+import PeakAttackRow from '../components/PeakAttackRow';
 
 // ── Scanner Tabs ──
-type ScannerTab = 'gap' | 'breakout';
+type ScannerTab = 'gap' | 'breakout' | 'peakattack';
 
 // ── Gap Scanner Types ──
 type DirectionFilter = 'all' | 'long' | 'short';
@@ -50,6 +51,23 @@ const BREAKOUT_DEFAULTS: BreakoutFilter = {
   pattern: 'none', volumeFilter: 'any', volumeFactor: 1.2,
 };
 
+// ── Peak Attack Scanner Types ──
+interface PeakAttackFilter {
+  minPrice: number;
+  maxPrice: number;
+  minVolume: number;
+  minTodayVol: number;
+  peakRangeMax: number;
+  minAttackCount: number;
+  minVolRatio: number;
+}
+
+const PEAK_ATTACK_DEFAULTS: PeakAttackFilter = {
+  minPrice: 10, maxPrice: 9999, minVolume: 500,
+  minTodayVol: 2000, peakRangeMax: 5,
+  minAttackCount: 3, minVolRatio: 1.0,
+};
+
 export default function Dashboard() {
   const c = useColors();
   const [tab, setTab] = useState<ScannerTab>('gap');
@@ -61,6 +79,10 @@ export default function Dashboard() {
   // ── Breakout state ──
   const [breakoutStocks, setBreakoutStocks] = useState<BreakoutAnalysis[]>([]);
   const [breakoutFilter, setBreakoutFilter] = useState<BreakoutFilter>({ ...BREAKOUT_DEFAULTS });
+
+  // ── Peak Attack state ──
+  const [peakAttackStocks, setPeakAttackStocks] = useState<PeakAttackAnalysis[]>([]);
+  const [peakAttackFilter, setPeakAttackFilter] = useState<PeakAttackFilter>({ ...PEAK_ATTACK_DEFAULTS });
 
   // ── Shared state ──
   const [loading, setLoading] = useState(false);
@@ -84,7 +106,7 @@ export default function Dashboard() {
         setGapStocks(result.stocks ?? []);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
-      } else {
+      } else if (tab === 'breakout') {
         const result = await scanBreakout({
           minPrice: breakoutFilter.minPrice, maxPrice: breakoutFilter.maxPrice,
           minVolume: breakoutFilter.minVolume, lookbackDays: breakoutFilter.lookbackDays,
@@ -93,6 +115,17 @@ export default function Dashboard() {
           volumeFactor: breakoutFilter.volumeFactor,
         });
         setBreakoutStocks(result.stocks ?? []);
+        setScannedAt(result.scannedAt);
+        setTotalScanned(result.scanned);
+      } else {
+        const result = await scanPeakAttack({
+          minPrice: peakAttackFilter.minPrice, maxPrice: peakAttackFilter.maxPrice,
+          minVolume: peakAttackFilter.minVolume, minTodayVol: peakAttackFilter.minTodayVol,
+          peakRangeMax: peakAttackFilter.peakRangeMax,
+          minAttackCount: peakAttackFilter.minAttackCount,
+          minVolRatio: peakAttackFilter.minVolRatio,
+        });
+        setPeakAttackStocks(result.stocks ?? []);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
       }
@@ -106,7 +139,8 @@ export default function Dashboard() {
 
   const handleReset = () => {
     if (tab === 'gap') setGapFilter({ ...GAP_DEFAULTS });
-    else setBreakoutFilter({ ...BREAKOUT_DEFAULTS });
+    else if (tab === 'breakout') setBreakoutFilter({ ...BREAKOUT_DEFAULTS });
+    else setPeakAttackFilter({ ...PEAK_ATTACK_DEFAULTS });
   };
 
   return (
@@ -116,7 +150,7 @@ export default function Dashboard() {
         <div>
           <h1 style={{ ...S.title, color: c.text }}>台股智慧掃描系統</h1>
           <p style={{ ...S.subtitle, color: c.textMuted }}>
-            震撼型跳空 & 突破前高掃描
+            震撼跳空 · 突破前高 · 攻頂突破
           </p>
         </div>
         <ThemeToggle />
@@ -124,7 +158,7 @@ export default function Dashboard() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, background: c.bgCard, borderRadius: 8, padding: 4, border: `1px solid ${c.border}` }}>
-        {([['gap', '震撼跳空'], ['breakout', '突破前高']] as const).map(([key, label]) => (
+        {([['gap', '震撼跳空'], ['breakout', '突破前高'], ['peakattack', '攻頂突破']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -142,10 +176,14 @@ export default function Dashboard() {
       </div>
 
       {/* Filter bar */}
-      {tab === 'gap' ? (
+      {tab === 'gap' && (
         <GapFilterBar filter={gapFilter} setFilter={setGapFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
-      ) : (
+      )}
+      {tab === 'breakout' && (
         <BreakoutFilterBar filter={breakoutFilter} setFilter={setBreakoutFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
+      )}
+      {tab === 'peakattack' && (
+        <PeakAttackFilterBar filter={peakAttackFilter} setFilter={setPeakAttackFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
       )}
 
       {/* Error */}
@@ -161,10 +199,14 @@ export default function Dashboard() {
       )}
 
       {/* Results */}
-      {tab === 'gap' ? (
+      {tab === 'gap' && (
         <GapResults stocks={gapStocks} filter={gapFilter} setFilter={setGapFilter} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
-      ) : (
+      )}
+      {tab === 'breakout' && (
         <BreakoutResults stocks={breakoutStocks} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
+      )}
+      {tab === 'peakattack' && (
+        <PeakAttackResults stocks={peakAttackStocks} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
       )}
     </div>
   );
@@ -373,6 +415,87 @@ function BreakoutResults({ stocks, loading, scannedAt, totalScanned }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// PEAK ATTACK SCANNER (攻頂突破)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function PeakAttackFilterBar({ filter, setFilter, loading, onScan, onReset }: {
+  filter: PeakAttackFilter; setFilter: React.Dispatch<React.SetStateAction<PeakAttackFilter>>;
+  loading: boolean; onScan: () => void; onReset: () => void;
+}) {
+  const c = useColors();
+  return (
+    <>
+      <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>價格 & 成交量</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput label="最低股價（元）" value={filter.minPrice} onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))} hint="建議 10+" />
+            <FilterInput label="最高股價（元）" value={filter.maxPrice} onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))} hint="預設不限" />
+            <FilterInput label="最低日均量（張）" value={filter.minVolume} onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))} hint="ADV20, 建議 500+" />
+            <FilterInput label="最低當日量（張）" value={filter.minTodayVol} onChange={(v) => setFilter((f) => ({ ...f, minTodayVol: v }))} hint="原策略 2000 張" />
+          </div>
+        </div>
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>攻頂條件</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput label="攻頂區間最大（%）" value={filter.peakRangeMax} onChange={(v) => setFilter((f) => ({ ...f, peakRangeMax: v }))} hint="原策略 5%" step={0.5} />
+            <FilterInput label="最少攻頂次數" value={filter.minAttackCount} onChange={(v) => setFilter((f) => ({ ...f, minAttackCount: v }))} hint="建議 3–5" />
+            <FilterInput label="最低量能倍數" value={filter.minVolRatio} onChange={(v) => setFilter((f) => ({ ...f, minVolRatio: v }))} hint="當日量/ADV20" step={0.1} />
+          </div>
+        </div>
+        <ScanActions loading={loading} onScan={onScan} onReset={onReset} />
+      </div>
+
+      <div style={S.legend}>
+        <LegendItem color="#f59e0b" label="攻頂區間" />
+        <LegendItem color={c.up} label="已突破" />
+        <LegendItem color={c.blue} label="攻頂次數" />
+        <LegendItem color={c.yellow} label="分數越高品質越好" />
+      </div>
+
+      <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
+        <strong style={{ color: c.text }}>攻頂突破策略說明：</strong><br />
+        用 KD(9,3,3) 追蹤每次 K{'>'} D 的攻頂高點，當最近 {filter.minAttackCount} 次攻頂高點在 {filter.peakRangeMax}% 以內（形成天花板），<br />
+        一旦股價突破這個天花板 + 當日成交量 {'>'} {filter.minTodayVol} 張 + 量能比 {'>'} {filter.minVolRatio}x → 飆股訊號<br />
+        <span style={{ color: c.textMuted }}>
+          註：原策略需要主力買賣超 {'>'} 2000 張 & 法人買賣超 {'>'} 1000 張，目前以量能比替代（Yahoo Finance 無法取得籌碼資料）
+        </span>
+      </div>
+    </>
+  );
+}
+
+function PeakAttackResults({ stocks, loading, scannedAt, totalScanned }: {
+  stocks: PeakAttackAnalysis[]; loading: boolean; scannedAt: string; totalScanned: number;
+}) {
+  const c = useColors();
+  const breakingCount = stocks.filter((s) => s.distPct <= 0).length;
+
+  return (
+    <>
+      {scannedAt && !loading && (
+        <div style={{ color: c.textDim, fontSize: 13 }}>
+          掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
+          &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
+          <strong style={{ color: c.text }}>{stocks.length}</strong> 支攻頂突破
+          {stocks.length > 0 && (
+            <span style={{ color: c.textMuted }}>
+              （<span style={{ color: c.up }}>已突破 {breakingCount}</span> / 接近突破 {stocks.length - breakingCount}）
+            </span>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {stocks.map((s) => <PeakAttackRow key={s.symbol} stock={s} />)}
+      </div>
+
+      <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合攻頂突破條件的股票。" />
+    </>
+  );
+}
+
 // SHARED COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════
 

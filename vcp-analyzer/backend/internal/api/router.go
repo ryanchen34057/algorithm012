@@ -26,10 +26,12 @@ func NewRouter() http.Handler {
 	ds := service.NewYahooFinance()
 	scanner := service.NewGapScanner()
 	breakoutScanner := service.NewBreakoutScanner()
+	peakAttackScanner := service.NewPeakAttackScanner()
 
 	stockH := handlers.NewStockHandler(ds, scanner)
 	gapH := handlers.NewGapHandler(ds, scanner)
 	breakoutH := handlers.NewBreakoutHandler(ds, breakoutScanner)
+	peakAttackH := handlers.NewPeakAttackHandler(ds, peakAttackScanner)
 
 	mux := http.NewServeMux()
 
@@ -38,6 +40,9 @@ func NewRouter() http.Handler {
 
 	// Breakout scan (scans full market)
 	mux.HandleFunc("/api/breakout/scan", breakoutH.Scan)
+
+	// Peak attack scan (scans full market)
+	mux.HandleFunc("/api/peakattack/scan", peakAttackH.Scan)
 
 	// Per-stock endpoints
 	mux.HandleFunc("/api/stock/", func(w http.ResponseWriter, r *http.Request) {

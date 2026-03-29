@@ -100,6 +100,43 @@ export interface BreakoutScanResult {
   scanned: number;
 }
 
+// ── Peak Attack Scanner (攻頂突破) ──
+
+export interface PeakAttackAnalysis {
+  symbol: string;
+  name: string;
+  currentPrice: number;
+  k: number;
+  d: number;
+  attackPeaks: number[];
+  peakHigh: number;
+  peakLow: number;
+  peakRangePct: number;
+  attackCount: number;
+  breakoutPrice: number;
+  distPct: number;
+  adv20: number;
+  todayVolume: number;
+  todayVolLots: number;
+  volRatio: number;
+  ma20: number;
+  ma50: number;
+  ma200: number;
+  entryPrice: number;
+  stopLoss: number;
+  target: number;
+  targetLabel: string;
+  rewardRisk: number;
+  score: number;
+}
+
+export interface PeakAttackScanResult {
+  stocks: PeakAttackAnalysis[];
+  scannedAt: string;
+  total: number;
+  scanned: number;
+}
+
 export interface PositionResult {
   symbol: string;
   entryPrice: number;
