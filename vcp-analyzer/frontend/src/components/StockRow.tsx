@@ -42,9 +42,10 @@ export default function StockRow({ gap }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontWeight: 800, fontSize: 20, color: c.text }}>{code}</span>
           <span style={{ color: c.textSecondary, fontSize: 15 }}>{gap.name}</span>
-          <span style={{ color: c.textMuted, fontSize: 13 }}>
-            ${gap.currentPrice}
+          <span style={{ color: c.text, fontSize: 17, fontWeight: 700 }}>
+            {gap.todayClose}
           </span>
+          <span style={{ color: c.textMuted, fontSize: 12 }}>收盤價</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           {/* Direction badge */}
