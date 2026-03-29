@@ -52,15 +52,11 @@ func (h *GapHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	}
 	concurrency := parseInt(q.Get("concurrency"), 10)
 
-	// Pre-filter uses a relaxed volume threshold: min(user's ADV20, 100) so
-	// the stock list isn't wiped out on weekends when TWSE/TPEx return zero or
-	// stale volume. The real ADV20 check happens inside the scanner with Yahoo data.
-	preFilterVol := int64(params.MinADV20Lots)
-	if preFilterVol > 100 {
-		preFilterVol = 100
-	}
-	log.Printf("[scan] fetching stock list (preFilterVol=%d張 minPrice=%.0f)...", preFilterVol, params.MinPrice)
-	stocks := service.FetchAllStocks(preFilterVol, params.MinPrice)
+	// Pre-filter: only filter by minPrice (no volume pre-filter).
+	// TWSE/TPEx API returns single-day volume which is unreliable for ADV20.
+	// The real ADV20 check happens inside the scanner with Yahoo Finance 20-day data.
+	log.Printf("[scan] fetching stock list (minPrice=%.0f)...", params.MinPrice)
+	stocks := service.FetchAllStocks(0, params.MinPrice)
 	log.Printf("[scan] %d stocks to analyse", len(stocks))
 
 	type result struct {
