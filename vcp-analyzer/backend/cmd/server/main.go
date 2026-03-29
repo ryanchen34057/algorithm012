@@ -11,7 +11,7 @@ import (
 func main() {
 	router := api.NewRouter()
 
-	port := "8080"
+	port := "8090"
 	fmt.Printf("VCP Analyzer backend listening on http://localhost:%s\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, router))
 }
