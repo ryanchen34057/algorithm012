@@ -19,12 +19,22 @@ interface Props {
 export default function StockChart({ chart, vcp }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const disposedRef = useRef(false);
   const c = useColors();
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    chartRef.current?.remove();
+    // Safely remove previous chart instance
+    if (chartRef.current && !disposedRef.current) {
+      try {
+        chartRef.current.remove();
+      } catch {
+        // Already disposed — ignore
+      }
+    }
+    chartRef.current = null;
+    disposedRef.current = false;
 
     const lc = createChart(containerRef.current, {
       layout: {
@@ -41,6 +51,7 @@ export default function StockChart({ chart, vcp }: Props) {
     });
     chartRef.current = lc;
 
+    // ── Candlestick ─────────────────────────────────────────────────────
     const candleSeries = lc.addSeries(CandlestickSeries, {
       upColor: c.green,
       downColor: c.red,
@@ -59,6 +70,7 @@ export default function StockChart({ chart, vcp }: Props) {
       }))
     );
 
+    // ── Volume ──────────────────────────────────────────────────────────
     const volumeSeries = lc.addSeries(HistogramSeries, {
       color: c.border,
       priceFormat: { type: 'volume' },
@@ -75,6 +87,7 @@ export default function StockChart({ chart, vcp }: Props) {
       }))
     );
 
+    // ── Moving averages ─────────────────────────────────────────────────
     const maConfigs = [
       { data: chart.ma50, color: '#f59e0b', title: 'MA50' },
       { data: chart.ma150, color: '#a78bfa', title: 'MA150' },
@@ -89,6 +102,7 @@ export default function StockChart({ chart, vcp }: Props) {
       );
     }
 
+    // ── VCP price lines ─────────────────────────────────────────────────
     if (vcp) {
       candleSeries.createPriceLine({
         price: vcp.entryPrice,
@@ -118,16 +132,27 @@ export default function StockChart({ chart, vcp }: Props) {
 
     lc.timeScale().fitContent();
 
+    // ── Resize observer ─────────────────────────────────────────────────
     const ro = new ResizeObserver(() => {
-      if (containerRef.current) {
-        lc.applyOptions({ width: containerRef.current.clientWidth });
+      if (containerRef.current && !disposedRef.current) {
+        try {
+          lc.applyOptions({ width: containerRef.current.clientWidth });
+        } catch {
+          // Chart was disposed during resize — ignore
+        }
       }
     });
     ro.observe(containerRef.current);
 
     return () => {
       ro.disconnect();
-      lc.remove();
+      disposedRef.current = true;
+      try {
+        lc.remove();
+      } catch {
+        // Already disposed — ignore
+      }
+      chartRef.current = null;
     };
   }, [chart, vcp, c]);
 
