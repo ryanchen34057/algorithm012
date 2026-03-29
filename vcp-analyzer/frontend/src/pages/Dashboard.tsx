@@ -12,6 +12,9 @@ interface ScanFilter {
   minTodayVolume: number;
   minGapPct: number;
   maxGapPct: number;
+  strictGap: boolean;
+  requireCandle: boolean;
+  requireBothMA: boolean;
 }
 
 const DEFAULTS: ScanFilter = {
@@ -19,8 +22,11 @@ const DEFAULTS: ScanFilter = {
   maxPrice: 500,
   minVolume: 500,
   minTodayVolume: 300,
-  minGapPct: 3,
+  minGapPct: 1.5,
   maxGapPct: 40,
+  strictGap: false,
+  requireCandle: true,
+  requireBothMA: false,
 };
 
 export default function Dashboard() {
@@ -43,6 +49,9 @@ export default function Dashboard() {
         minTodayVolume: filter.minTodayVolume,
         minGapPct: filter.minGapPct,
         maxGapPct: filter.maxGapPct,
+        strictGap: filter.strictGap,
+        requireCandle: filter.requireCandle,
+        requireBothMA: filter.requireBothMA,
       });
       setStocks(result.stocks ?? []);
       setScannedAt(result.scannedAt);
@@ -56,6 +65,10 @@ export default function Dashboard() {
   };
 
   const handleReset = () => setFilter({ ...DEFAULTS });
+
+  const gapRefLabel = filter.strictGap ? '跳過昨高/昨低' : '跳過昨收';
+  const candleLabel = filter.requireCandle ? '要求昨日K線顏色' : '不限';
+  const maLabel = filter.requireBothMA ? 'MA20 且 MA200' : 'MA20 或 MA200';
 
   return (
     <div style={{ ...S.page, background: c.bg }}>
@@ -76,30 +89,10 @@ export default function Dashboard() {
         <div style={S.filterGroup}>
           <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>價格 & 成交量</span>
           <div style={S.filterGroupInputs}>
-            <FilterInput
-              label="最低股價（元）"
-              value={filter.minPrice}
-              onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))}
-              hint="建議 10–50"
-            />
-            <FilterInput
-              label="最高股價（元）"
-              value={filter.maxPrice}
-              onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))}
-              hint="建議 100–1000"
-            />
-            <FilterInput
-              label="最低日均量（張）"
-              value={filter.minVolume}
-              onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))}
-              hint="ADV20, 建議 300–1000"
-            />
-            <FilterInput
-              label="最低當日量（張）"
-              value={filter.minTodayVolume}
-              onChange={(v) => setFilter((f) => ({ ...f, minTodayVolume: v }))}
-              hint="建議 100–500"
-            />
+            <FilterInput label="最低股價（元）" value={filter.minPrice} onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))} hint="建議 10–50" />
+            <FilterInput label="最高股價（元）" value={filter.maxPrice} onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))} hint="建議 100–1000" />
+            <FilterInput label="最低日均量（張）" value={filter.minVolume} onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))} hint="ADV20, 建議 300–1000" />
+            <FilterInput label="最低當日量（張）" value={filter.minTodayVolume} onChange={(v) => setFilter((f) => ({ ...f, minTodayVolume: v }))} hint="建議 100–500" />
           </div>
         </div>
 
@@ -107,19 +100,35 @@ export default function Dashboard() {
         <div style={S.filterGroup}>
           <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>跳空幅度</span>
           <div style={S.filterGroupInputs}>
-            <FilterInput
-              label="最低跳空（%）"
-              value={filter.minGapPct}
-              onChange={(v) => setFilter((f) => ({ ...f, minGapPct: v }))}
-              hint="建議 2–5"
-              step={0.5}
+            <FilterInput label="最低跳空（%）" value={filter.minGapPct} onChange={(v) => setFilter((f) => ({ ...f, minGapPct: v }))} hint="建議 1–5" step={0.5} />
+            <FilterInput label="最高跳空（%）" value={filter.maxGapPct} onChange={(v) => setFilter((f) => ({ ...f, maxGapPct: v }))} hint="建議 20–50" />
+          </div>
+        </div>
+
+        {/* Group 3: Strictness toggles */}
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>嚴格度</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <ToggleSwitch
+              label="跳空基準"
+              checked={filter.strictGap}
+              onChange={(v) => setFilter((f) => ({ ...f, strictGap: v }))}
+              onLabel="跳過昨高/昨低（嚴格）"
+              offLabel="跳過昨收（建議）"
             />
-            <FilterInput
-              label="最高跳空（%）"
-              value={filter.maxGapPct}
-              onChange={(v) => setFilter((f) => ({ ...f, maxGapPct: v }))}
-              hint="建議 20–50"
-              step={1}
+            <ToggleSwitch
+              label="昨日K線"
+              checked={filter.requireCandle}
+              onChange={(v) => setFilter((f) => ({ ...f, requireCandle: v }))}
+              onLabel="要求陰/陽線"
+              offLabel="不限顏色"
+            />
+            <ToggleSwitch
+              label="均線條件"
+              checked={filter.requireBothMA}
+              onChange={(v) => setFilter((f) => ({ ...f, requireBothMA: v }))}
+              onLabel="同時符合 MA20 & MA200"
+              offLabel="任一即可（建議）"
             />
           </div>
         </div>
@@ -160,8 +169,9 @@ export default function Dashboard() {
       <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
         <strong style={{ color: c.text }}>目前篩選條件：</strong><br />
         股價 TWD {filter.minPrice}–{filter.maxPrice} · ADV20 {'>'} {filter.minVolume} 張 · 當日成交量 {'>'} {filter.minTodayVolume} 張 · 跳空幅度 {filter.minGapPct}%–{filter.maxGapPct}%<br />
-        Gap Up：昨日陰線 + 今開 {'>'} 昨高 + 今開 {'>'} MA20 & MA200<br />
-        Gap Down：昨日陽線 + 今開 {'<'} 昨低 + 今開 {'<'} MA20 & MA200
+        跳空基準：{gapRefLabel} · 昨日K線：{candleLabel} · 均線：{maLabel}<br />
+        Gap Up：{filter.requireCandle ? '昨日陰線 + ' : ''}今開 {'>'} {filter.strictGap ? '昨高' : '昨收'} + 今開 {'>'} {maLabel}<br />
+        Gap Down：{filter.requireCandle ? '昨日陽線 + ' : ''}今開 {'<'} {filter.strictGap ? '昨低' : '昨收'} + 今開 {'<'} {maLabel}
       </div>
 
       {error && (
@@ -195,7 +205,7 @@ export default function Dashboard() {
       {stocks.length === 0 && !loading && scannedAt && (
         <div style={{ ...S.empty, color: c.textDim }}>
           目前沒有符合震撼型跳空條件的股票。<br />
-          可以調整篩選條件後再試。
+          可以調整篩選條件或放寬嚴格度後再試。
         </div>
       )}
 
@@ -212,17 +222,9 @@ export default function Dashboard() {
 }
 
 function FilterInput({
-  label,
-  value,
-  onChange,
-  hint,
-  step = 1,
+  label, value, onChange, hint, step = 1,
 }: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  hint?: string;
-  step?: number;
+  label: string; value: number; onChange: (v: number) => void; hint?: string; step?: number;
 }) {
   const c = useColors();
   return (
@@ -234,17 +236,43 @@ function FilterInput({
         step={step}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{
-          background: c.bgInput,
-          border: `1px solid ${c.border}`,
-          borderRadius: 6,
-          color: c.text,
-          fontSize: 15,
-          padding: '7px 12px',
-          outline: 'none',
-          width: 120,
+          background: c.bgInput, border: `1px solid ${c.border}`, borderRadius: 6,
+          color: c.text, fontSize: 15, padding: '7px 12px', outline: 'none', width: 120,
         }}
       />
       {hint && <span style={{ color: c.textDim, fontSize: 11 }}>{hint}</span>}
+    </div>
+  );
+}
+
+function ToggleSwitch({
+  label, checked, onChange, onLabel, offLabel,
+}: {
+  label: string; checked: boolean; onChange: (v: boolean) => void;
+  onLabel: string; offLabel: string;
+}) {
+  const c = useColors();
+  return (
+    <div
+      style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
+      onClick={() => onChange(!checked)}
+    >
+      <div style={{
+        width: 36, height: 20, borderRadius: 10,
+        background: checked ? c.blue : c.border,
+        position: 'relative', transition: 'background 0.2s',
+        flexShrink: 0,
+      }}>
+        <div style={{
+          width: 16, height: 16, borderRadius: 8,
+          background: '#fff', position: 'absolute', top: 2,
+          left: checked ? 18 : 2, transition: 'left 0.2s',
+        }} />
+      </div>
+      <span style={{ color: c.textSecondary, fontSize: 12, minWidth: 50 }}>{label}</span>
+      <span style={{ color: checked ? c.blue : c.textMuted, fontSize: 12, fontWeight: 600 }}>
+        {checked ? onLabel : offLabel}
+      </span>
     </div>
   );
 }
@@ -261,95 +289,41 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 
 const S: Record<string, React.CSSProperties> = {
   page: {
-    maxWidth: 1200,
-    margin: '0 auto',
-    padding: '32px 24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 24,
-    minHeight: '100vh',
-    transition: 'background-color 0.2s',
+    maxWidth: 1200, margin: '0 auto', padding: '32px 24px',
+    display: 'flex', flexDirection: 'column', gap: 24,
+    minHeight: '100vh', transition: 'background-color 0.2s',
   },
   header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 16,
+    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+    flexWrap: 'wrap', gap: 16,
   },
-  title: {
-    margin: 0,
-    fontSize: 28,
-    fontWeight: 800,
-    letterSpacing: '-0.02em',
-  },
-  subtitle: {
-    margin: '4px 0 0',
-    fontSize: 15,
-  },
+  title: { margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' },
+  subtitle: { margin: '4px 0 0', fontSize: 15 },
   filterBar: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 24,
-    padding: '16px 20px',
-    borderRadius: 8,
-    flexWrap: 'wrap',
+    display: 'flex', alignItems: 'flex-start', gap: 24,
+    padding: '16px 20px', borderRadius: 8, flexWrap: 'wrap',
     border: '1px solid transparent',
   },
-  filterGroup: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 8,
-  },
+  filterGroup: { display: 'flex', flexDirection: 'column' as const, gap: 8 },
   filterGroupLabel: {
-    fontSize: 11,
-    fontWeight: 700,
-    textTransform: 'uppercase' as const,
+    fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const,
     letterSpacing: '0.06em',
   },
-  filterGroupInputs: {
-    display: 'flex',
-    gap: 16,
-    flexWrap: 'wrap' as const,
-  },
+  filterGroupInputs: { display: 'flex', gap: 16, flexWrap: 'wrap' as const },
   scanBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    color: '#fff',
-    border: 'none',
-    borderRadius: 8,
-    padding: '10px 24px',
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: 'pointer',
+    display: 'flex', alignItems: 'center', gap: 8,
+    color: '#fff', border: 'none', borderRadius: 8,
+    padding: '10px 24px', fontSize: 15, fontWeight: 700, cursor: 'pointer',
   },
   resetBtn: {
-    background: 'transparent',
-    border: '1px solid',
-    borderRadius: 8,
-    padding: '9px 16px',
-    fontSize: 13,
-    cursor: 'pointer',
+    background: 'transparent', border: '1px solid', borderRadius: 8,
+    padding: '9px 16px', fontSize: 13, cursor: 'pointer',
   },
   spinner: {
-    display: 'inline-block',
-    width: 14,
-    height: 14,
-    border: '2px solid #ffffff44',
-    borderTopColor: '#fff',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
+    display: 'inline-block', width: 14, height: 14,
+    border: '2px solid #ffffff44', borderTopColor: '#fff',
+    borderRadius: '50%', animation: 'spin 0.8s linear infinite',
   },
-  legend: {
-    display: 'flex',
-    gap: 20,
-    flexWrap: 'wrap',
-  },
-  empty: {
-    textAlign: 'center',
-    padding: '60px 0',
-    fontSize: 15,
-    lineHeight: 2,
-  },
+  legend: { display: 'flex', gap: 20, flexWrap: 'wrap' },
+  empty: { textAlign: 'center', padding: '60px 0', fontSize: 15, lineHeight: 2 },
 };

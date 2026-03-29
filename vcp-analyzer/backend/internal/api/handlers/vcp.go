@@ -40,12 +40,15 @@ func (h *GapHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	defaults := service.DefaultGapScanParams()
 
 	params := service.GapScanParams{
-		MinPrice:        parseFloat(q.Get("minPrice"), defaults.MinPrice),
-		MaxPrice:        parseFloat(q.Get("maxPrice"), defaults.MaxPrice),
-		MinADV20Lots:    parseFloat(q.Get("minVolume"), defaults.MinADV20Lots),
-		MinTodayVolLots: parseFloat(q.Get("minTodayVolume"), defaults.MinTodayVolLots),
-		MinGapPct:       parseFloat(q.Get("minGapPct"), defaults.MinGapPct),
-		MaxGapPct:       parseFloat(q.Get("maxGapPct"), defaults.MaxGapPct),
+		MinPrice:           parseFloat(q.Get("minPrice"), defaults.MinPrice),
+		MaxPrice:           parseFloat(q.Get("maxPrice"), defaults.MaxPrice),
+		MinADV20Lots:       parseFloat(q.Get("minVolume"), defaults.MinADV20Lots),
+		MinTodayVolLots:    parseFloat(q.Get("minTodayVolume"), defaults.MinTodayVolLots),
+		MinGapPct:          parseFloat(q.Get("minGapPct"), defaults.MinGapPct),
+		MaxGapPct:          parseFloat(q.Get("maxGapPct"), defaults.MaxGapPct),
+		StrictGap:          service.ParseBoolParam(q.Get("strictGap"), defaults.StrictGap),
+		RequireCandleColor: service.ParseBoolParam(q.Get("requireCandle"), defaults.RequireCandleColor),
+		RequireBothMA:      service.ParseBoolParam(q.Get("requireBothMA"), defaults.RequireBothMA),
 	}
 	concurrency := parseInt(q.Get("concurrency"), 10)
 

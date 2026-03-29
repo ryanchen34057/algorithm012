@@ -1,39 +1,46 @@
 package service
 
 import (
-	"log"
 	"math"
 	"sort"
 
 	"vcp-analyzer/internal/model"
 )
 
-// GapScanParams holds all configurable filter thresholds.
-// Taiwan-adapted defaults (original US values → Taiwan equivalents):
-//
-//	Price:   $1–$100      → TWD 10–500
-//	ADV20:   >2M shares   → >500 張 (500K shares)
-//	Opening: >300K shares  → >300 張 (daily vol proxy, no intraday data)
-//	Gap%:    3%–40%        → same (universal)
-//	MA:      20, 200 SMA   → same (universal)
+// GapScanParams holds all configurable filter thresholds and strictness toggles.
 type GapScanParams struct {
+	// ── Numeric filters ──
 	MinPrice        float64 // 最低股價 (TWD), default 10
 	MaxPrice        float64 // 最高股價 (TWD), default 500
 	MinADV20Lots    float64 // 最低 20 日均量 (張), default 500
 	MinTodayVolLots float64 // 最低當日成交量 (張), default 300
-	MinGapPct       float64 // 最低跳空幅度 (%), default 3
+	MinGapPct       float64 // 最低跳空幅度 (%), default 1.5
 	MaxGapPct       float64 // 最高跳空幅度 (%), default 40
+
+	// ── Strictness toggles ──
+	// StrictGap: true = open must gap over yesterday's HIGH/LOW (original US version)
+	//            false = open must gap over yesterday's CLOSE (recommended for Taiwan)
+	StrictGap bool
+	// RequireCandleColor: true = yesterday must be bearish(gap up)/bullish(gap down)
+	//                     false = any yesterday candle color accepted
+	RequireCandleColor bool
+	// RequireBothMA: true = open must be above/below BOTH MA20 and MA200
+	//               false = open must be above/below at least ONE of MA20 or MA200
+	RequireBothMA bool
 }
 
 // DefaultGapScanParams returns recommended defaults for Taiwan stocks.
 func DefaultGapScanParams() GapScanParams {
 	return GapScanParams{
-		MinPrice:        10,
-		MaxPrice:        500,
-		MinADV20Lots:    500,
-		MinTodayVolLots: 300,
-		MinGapPct:       3,
-		MaxGapPct:       40,
+		MinPrice:           10,
+		MaxPrice:           500,
+		MinADV20Lots:       500,
+		MinTodayVolLots:    300,
+		MinGapPct:          1.5,
+		MaxGapPct:          40,
+		StrictGap:          false, // 台股建議用「跳過昨收」
+		RequireCandleColor: true,  // 保留昨日 K 線顏色要求
+		RequireBothMA:      false, // 任一 MA 即可（台股較寬鬆）
 	}
 }
 
@@ -47,7 +54,6 @@ func NewGapScanner() *GapScanner { return &GapScanner{} }
 func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) *model.GapAnalysis {
 	candles := chart.Candles
 	if len(candles) < 201 {
-		log.Printf("[gap] %s: skipped — only %d candles (need 201+)", chart.Symbol, len(candles))
 		return nil
 	}
 
@@ -61,8 +67,6 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 		currentPrice = today.Close
 	}
 	if currentPrice < params.MinPrice || currentPrice > params.MaxPrice {
-		log.Printf("[gap] %s: skipped — price %.2f outside [%.0f, %.0f]",
-			chart.Symbol, currentPrice, params.MinPrice, params.MaxPrice)
 		return nil
 	}
 
@@ -70,16 +74,12 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	adv20Shares := avgVolumeN(candles, 20)
 	adv20Lots := adv20Shares / 1000.0
 	if adv20Lots < params.MinADV20Lots {
-		log.Printf("[gap] %s: skipped — ADV20 %.0f張 < %.0f張",
-			chart.Symbol, adv20Lots, params.MinADV20Lots)
 		return nil
 	}
 
 	// Today's volume proxy for opening momentum (張)
 	todayVolLots := float64(today.Volume) / 1000.0
 	if todayVolLots < params.MinTodayVolLots {
-		log.Printf("[gap] %s: skipped — today vol %.0f張 < %.0f張",
-			chart.Symbol, todayVolLots, params.MinTodayVolLots)
 		return nil
 	}
 
@@ -87,13 +87,11 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	ma20 := chart.MA20
 	ma200 := chart.MA200
 	if len(ma20) < n || len(ma200) < n {
-		log.Printf("[gap] %s: skipped — MA data length mismatch", chart.Symbol)
 		return nil
 	}
 	ma20Today := ma20[n-1]
 	ma200Today := ma200[n-1]
 	if ma20Today == 0 || ma200Today == 0 {
-		log.Printf("[gap] %s: skipped — MA20=%.2f MA200=%.2f (zero)", chart.Symbol, ma20Today, ma200Today)
 		return nil
 	}
 
@@ -101,22 +99,54 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	gapPct := (today.Open - yesterday.Close) / yesterday.Close * 100
 	var direction model.GapDirection
 
-	// Condition A: Shock Gap Up (Long)
-	gapUpOK := yesterday.Close < yesterday.Open && // 昨日陰線
-		today.Open > yesterday.High && // 跳空過昨高
-		gapPct > params.MinGapPct && gapPct < params.MaxGapPct &&
-		today.Open > ma20Today && today.Open > ma200Today
+	// --- Gap Up (Long) ---
+	var gapUpOK bool
+	{
+		// 1. Gap reference check
+		var gapRefOK bool
+		if params.StrictGap {
+			gapRefOK = today.Open > yesterday.High // 跳過昨高（嚴格）
+		} else {
+			gapRefOK = today.Open > yesterday.Close // 跳過昨收（寬鬆）
+		}
+		// 2. Gap size
+		gapSizeOK := gapPct > params.MinGapPct && gapPct < params.MaxGapPct
+		// 3. Yesterday candle color
+		candleOK := true
+		if params.RequireCandleColor {
+			candleOK = yesterday.Close < yesterday.Open // 昨日陰線
+		}
+		// 4. MA condition
+		var maOK bool
+		if params.RequireBothMA {
+			maOK = today.Open > ma20Today && today.Open > ma200Today
+		} else {
+			maOK = today.Open > ma20Today || today.Open > ma200Today
+		}
+		gapUpOK = gapRefOK && gapSizeOK && candleOK && maOK
+	}
 
-	// Condition B: Shock Gap Down (Short)
-	gapDownOK := yesterday.Close > yesterday.Open && // 昨日陽線
-		today.Open < yesterday.Low && // 跳空破昨低
-		gapPct < -params.MinGapPct && gapPct > -params.MaxGapPct &&
-		today.Open < ma20Today && today.Open < ma200Today
-
-	if !gapUpOK && !gapDownOK {
-		log.Printf("[gap] %s: skipped — no gap pattern (gap=%.2f%%, yOpen=%.2f yCl=%.2f yHi=%.2f yLo=%.2f tOpen=%.2f MA20=%.2f MA200=%.2f)",
-			chart.Symbol, gapPct, yesterday.Open, yesterday.Close, yesterday.High, yesterday.Low,
-			today.Open, ma20Today, ma200Today)
+	// --- Gap Down (Short) ---
+	var gapDownOK bool
+	{
+		var gapRefOK bool
+		if params.StrictGap {
+			gapRefOK = today.Open < yesterday.Low // 跳空破昨低（嚴格）
+		} else {
+			gapRefOK = today.Open < yesterday.Close // 跳空破昨收（寬鬆）
+		}
+		gapSizeOK := gapPct < -params.MinGapPct && gapPct > -params.MaxGapPct
+		candleOK := true
+		if params.RequireCandleColor {
+			candleOK = yesterday.Close > yesterday.Open // 昨日陽線
+		}
+		var maOK bool
+		if params.RequireBothMA {
+			maOK = today.Open < ma20Today && today.Open < ma200Today
+		} else {
+			maOK = today.Open < ma20Today || today.Open < ma200Today
+		}
+		gapDownOK = gapRefOK && gapSizeOK && candleOK && maOK
 	}
 
 	if gapUpOK {
@@ -132,15 +162,13 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	var stopLoss, target float64
 
 	if direction == model.GapUp {
-		// Stop at gap fill level (yesterday's close)
 		stopLoss = yesterday.Close
 		risk := entry - stopLoss
-		target = roundTo2(entry + 3*risk) // R:R = 3:1
+		target = roundTo2(entry + 3*risk)
 	} else {
-		// Short: stop at yesterday's close (gap fill)
 		stopLoss = yesterday.Close
 		risk := stopLoss - entry
-		target = roundTo2(entry - 3*risk) // R:R = 3:1
+		target = roundTo2(entry - 3*risk)
 	}
 
 	// ── Score ────────────────────────────────────────────────────────────
@@ -170,7 +198,6 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 }
 
 // ── Scoring ──────────────────────────────────────────────────────────────────
-// Max 100 points, based on gap quality signals.
 func calcGapScore(
 	gapPct, adv20Lots, todayVolLots, ma20, ma200 float64,
 	today, yesterday model.OHLCV,
@@ -179,11 +206,12 @@ func calcGapScore(
 	score := 0.0
 
 	// 1. Gap size quality (30 pts)
-	// Sweet spot: 5%–15% gap → full points; taper outside
 	absGap := math.Abs(gapPct)
 	if absGap >= 5 && absGap <= 15 {
 		score += 30
 	} else if absGap >= 3 && absGap < 5 {
+		score += 20
+	} else if absGap >= 1.5 && absGap < 3 {
 		score += 15
 	} else if absGap > 15 && absGap <= 25 {
 		score += 20
@@ -192,7 +220,6 @@ func calcGapScore(
 	}
 
 	// 2. Volume surge (25 pts)
-	// Today's volume vs ADV20 — higher = more conviction
 	volRatio := todayVolLots / adv20Lots
 	if volRatio >= 3.0 {
 		score += 25
@@ -207,24 +234,29 @@ func calcGapScore(
 	}
 
 	// 3. MA alignment strength (20 pts)
-	// For gap up: price well above both MAs → stronger
-	// For gap down: price well below both MAs → stronger
 	if direction == model.GapUp {
-		if today.Open > ma20 && today.Open > ma200 && ma20 > ma200 {
-			score += 20 // MA20 > MA200 = uptrend alignment
+		aboveBoth := today.Open > ma20 && today.Open > ma200
+		maAligned := ma20 > ma200
+		if aboveBoth && maAligned {
+			score += 20
+		} else if aboveBoth {
+			score += 15
 		} else {
-			score += 10
+			score += 8
 		}
 	} else {
-		if today.Open < ma20 && today.Open < ma200 && ma20 < ma200 {
-			score += 20 // MA20 < MA200 = downtrend alignment
+		belowBoth := today.Open < ma20 && today.Open < ma200
+		maAligned := ma20 < ma200
+		if belowBoth && maAligned {
+			score += 20
+		} else if belowBoth {
+			score += 15
 		} else {
-			score += 10
+			score += 8
 		}
 	}
 
 	// 4. Yesterday candle body size (15 pts)
-	// Larger body = more "shocking" reversal
 	bodyPct := math.Abs(yesterday.Close-yesterday.Open) / yesterday.Open * 100
 	if bodyPct >= 2.0 {
 		score += 15
@@ -235,7 +267,6 @@ func calcGapScore(
 	}
 
 	// 5. Liquidity bonus (10 pts)
-	// Higher ADV20 = more institutional interest
 	if adv20Lots >= 2000 {
 		score += 10
 	} else if adv20Lots >= 1000 {
@@ -249,7 +280,6 @@ func calcGapScore(
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// avgVolumeN returns the average daily volume (in shares) over the last N bars.
 func avgVolumeN(candles []model.OHLCV, n int) float64 {
 	total := len(candles)
 	if total == 0 {
@@ -294,4 +324,16 @@ func SortByScore(stocks []model.GapAnalysis) {
 	sort.Slice(stocks, func(i, j int) bool {
 		return stocks[i].Score > stocks[j].Score
 	})
+}
+
+// ParseBoolParam parses a boolean query parameter with a default value.
+func ParseBoolParam(s string, def bool) bool {
+	switch s {
+	case "true", "1", "yes":
+		return true
+	case "false", "0", "no":
+		return false
+	default:
+		return def
+	}
 }

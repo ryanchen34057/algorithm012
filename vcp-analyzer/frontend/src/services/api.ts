@@ -10,8 +10,11 @@ export interface ScanParams {
   minPrice?: number;        // 最低股價（元），預設 10
   maxPrice?: number;        // 最高股價（元），預設 500
   minTodayVolume?: number;  // 最低當日成交量（張），預設 300
-  minGapPct?: number;       // 最低跳空幅度（%），預設 3
+  minGapPct?: number;       // 最低跳空幅度（%），預設 1.5
   maxGapPct?: number;       // 最高跳空幅度（%），預設 40
+  strictGap?: boolean;      // 嚴格跳空（過昨高/昨低），預設 false
+  requireCandle?: boolean;  // 要求昨日 K 線顏色，預設 true
+  requireBothMA?: boolean;  // 要求同時符合 MA20 & MA200，預設 false
   concurrency?: number;     // 並行請求數，預設 10
 }
 
