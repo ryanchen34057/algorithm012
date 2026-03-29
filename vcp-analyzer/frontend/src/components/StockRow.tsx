@@ -114,7 +114,8 @@ export default function StockRow({ gap }: Props) {
           <InfoChip label="跳空幅度" value={`${gap.gapPercent > 0 ? '+' : ''}${gap.gapPercent}%`} color={dirColor} />
           <InfoChip label="進場點" value={`$${gap.entryPrice}`} color={c.blue} />
           <InfoChip label="停損點" value={`$${gap.stopLoss}`} color={c.red} />
-          <InfoChip label="目標價" value={`$${gap.target}`} color={c.green} />
+          <InfoChip label="目標價" value={`$${gap.target}`} color={c.green} sub={gap.targetLabel} />
+          <InfoChip label="風報比" value={gap.targetType === 'trailing_stop' ? '移動停損' : `1 : ${gap.rewardRisk}`} color={gap.rewardRisk >= 3 ? c.up : c.blue} />
           <InfoChip label="ADV20" value={`${gap.adv20.toLocaleString()} 張`} />
           <InfoChip label="MA20" value={`$${gap.ma20}`} />
           <InfoChip label="MA200" value={`$${gap.ma200}`} />
@@ -171,12 +172,13 @@ function DetailRow({ label, value, c, highlight }: {
   );
 }
 
-function InfoChip({ label, value, color }: { label: string; value: string; color?: string }) {
+function InfoChip({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
   const c = useColors();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <span style={{ color: c.textMuted, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
       <span style={{ fontWeight: 700, fontSize: 15, color: color ?? c.text }}>{value}</span>
+      {sub && <span style={{ color: c.textMuted, fontSize: 10 }}>{sub}</span>}
     </div>
   );
 }

@@ -160,22 +160,32 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	// ── Entry / Stop / Target ────────────────────────────────────────────
 	// 進場點用最新收盤價（掃描在收盤後執行，隔日開盤最接近昨收）
 	entry := today.Close
-	var stopLoss, target float64
+	stopLoss := yesterday.Close
 
+	var risk float64
 	if direction == model.GapUp {
-		stopLoss = yesterday.Close
-		risk := entry - stopLoss
-		if risk <= 0 {
-			return nil // 收盤跌回缺口內，訊號失效
-		}
-		target = roundTo2(entry + 3*risk)
+		risk = entry - stopLoss
 	} else {
-		stopLoss = yesterday.Close
-		risk := stopLoss - entry
-		if risk <= 0 {
-			return nil // 收盤漲回缺口內，訊號失效
+		risk = stopLoss - entry
+	}
+	if risk <= 0 {
+		return nil // 收盤回到缺口內，訊號失效
+	}
+
+	// 用技術分析找目標價
+	target, targetType, targetLabel := findTarget(candles, entry, stopLoss, risk, direction, ma20Today, ma200Today)
+	rr := 0.0
+	if risk > 0 {
+		if direction == model.GapUp {
+			rr = (target - entry) / risk
+		} else {
+			rr = (entry - target) / risk
 		}
-		target = roundTo2(entry - 3*risk)
+	}
+
+	// 風報比 < 2:1 的交易不值得做（移動停損類型除外）
+	if targetType != model.TargetTrailingStop && rr < 2.0 {
+		return nil
 	}
 
 	// ── Score ────────────────────────────────────────────────────────────
@@ -196,6 +206,9 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 		EntryPrice:     roundTo2(entry),
 		StopLoss:       roundTo2(stopLoss),
 		Target:         roundTo2(target),
+		TargetType:     targetType,
+		TargetLabel:    targetLabel,
+		RewardRisk:     roundTo2(rr),
 		ADV20:          roundTo2(adv20Lots),
 		TodayVolume:    today.Volume,
 		MA20:           roundTo2(ma20Today),
@@ -283,6 +296,200 @@ func calcGapScore(
 	}
 
 	return roundTo2(math.Min(score, 100))
+}
+
+// ── Target Price Discovery ──────────────────────────────────────────────────
+
+// findTarget determines the target price using technical analysis:
+//  1. 前波高/低點（swing highs/lows）
+//  2. K線密集區（consolidation zones）壓力/支撐
+//  3. MA200 / MA20 壓力/支撐
+//  4. 若處於歷史新高/低 → 建議移動停損
+//  5. 最終驗證：風報比 >= 2:1（由呼叫端檢查）
+func findTarget(
+	candles []model.OHLCV, entry, stopLoss, risk float64,
+	dir model.GapDirection, ma20, ma200 float64,
+) (target float64, tt model.TargetType, label string) {
+	n := len(candles)
+
+	// Collect candidate targets: (price, type, label)
+	type candidate struct {
+		price float64
+		tt    model.TargetType
+		label string
+	}
+	var candidates []candidate
+
+	// ── 1. Swing highs / lows (前波高低點) ──
+	// Use 5-bar pivot: a swing high has high > 5 bars before & after
+	pivotN := 5
+	lookback := n - 1 // exclude today
+	if lookback > 200 {
+		lookback = 200
+	}
+	startIdx := n - 1 - lookback
+	if startIdx < pivotN {
+		startIdx = pivotN
+	}
+
+	if dir == model.GapUp {
+		// Find swing highs above entry
+		for i := startIdx; i < n-1-pivotN; i++ {
+			isPivot := true
+			for j := 1; j <= pivotN; j++ {
+				if candles[i].High <= candles[i-j].High || candles[i].High <= candles[i+j].High {
+					isPivot = false
+					break
+				}
+			}
+			if isPivot && candles[i].High > entry {
+				candidates = append(candidates, candidate{
+					price: candles[i].High,
+					tt:    model.TargetSwingPoint,
+					label: "前波高點壓力",
+				})
+			}
+		}
+	} else {
+		// Find swing lows below entry
+		for i := startIdx; i < n-1-pivotN; i++ {
+			isPivot := true
+			for j := 1; j <= pivotN; j++ {
+				if candles[i].Low >= candles[i-j].Low || candles[i].Low >= candles[i+j].Low {
+					isPivot = false
+					break
+				}
+			}
+			if isPivot && candles[i].Low < entry {
+				candidates = append(candidates, candidate{
+					price: candles[i].Low,
+					tt:    model.TargetSwingPoint,
+					label: "前波低點支撐",
+				})
+			}
+		}
+	}
+
+	// ── 2. Consolidation zones (K線密集區) ──
+	// Scan for zones where 10+ candles overlap in a tight range (< 5% of price)
+	windowSize := 15
+	minOverlap := 10
+	for i := startIdx; i <= n-1-windowSize; i++ {
+		lo, hi := candles[i].Low, candles[i].High
+		for j := 1; j < windowSize; j++ {
+			if candles[i+j].Low < lo {
+				lo = candles[i+j].Low
+			}
+			if candles[i+j].High > hi {
+				hi = candles[i+j].High
+			}
+		}
+		rangePct := (hi - lo) / lo * 100
+		if rangePct > 5 {
+			continue
+		}
+		// Count how many candles overlap with the zone's midpoint
+		mid := (hi + lo) / 2
+		overlap := 0
+		for j := 0; j < windowSize; j++ {
+			if candles[i+j].Low <= mid && candles[i+j].High >= mid {
+				overlap++
+			}
+		}
+		if overlap < minOverlap {
+			continue
+		}
+		if dir == model.GapUp && hi > entry {
+			candidates = append(candidates, candidate{
+				price: hi,
+				tt:    model.TargetConsolidation,
+				label: "盤整密集區壓力",
+			})
+		} else if dir == model.GapDown && lo < entry {
+			candidates = append(candidates, candidate{
+				price: lo,
+				tt:    model.TargetConsolidation,
+				label: "盤整密集區支撐",
+			})
+		}
+	}
+
+	// ── 3. MA200 / MA20 as target ──
+	if dir == model.GapUp {
+		if ma200 > entry {
+			candidates = append(candidates, candidate{price: ma200, tt: model.TargetMA200, label: "200日均線壓力"})
+		}
+		// MA20: if price extended far above MA20, MA20 is not a target for long
+		// MA20 target is mainly for exhaustion reversal (short), skip for long
+	} else {
+		if ma200 < entry {
+			candidates = append(candidates, candidate{price: ma200, tt: model.TargetMA200, label: "200日均線支撐"})
+		}
+		// MA20 as target for short: if price crashed far below MA20, bounce target = MA20
+		if ma20 < entry {
+			candidates = append(candidates, candidate{price: ma20, tt: model.TargetMA20, label: "20日均線回歸"})
+		}
+	}
+
+	// ── Pick the nearest valid target (R:R >= 2) ──
+	bestDist := math.MaxFloat64
+	found := false
+	for _, c := range candidates {
+		var dist, rr float64
+		if dir == model.GapUp {
+			dist = c.price - entry
+			rr = dist / risk
+		} else {
+			dist = entry - c.price
+			rr = dist / risk
+		}
+		if dist <= 0 || rr < 2.0 {
+			continue
+		}
+		if dist < bestDist {
+			bestDist = dist
+			target = c.price
+			tt = c.tt
+			label = c.label
+			found = true
+		}
+	}
+
+	if found {
+		return target, tt, label
+	}
+
+	// ── 4. Check if at all-time high/low → trailing stop ──
+	if dir == model.GapUp {
+		allTimeHigh := 0.0
+		for i := 0; i < n-1; i++ {
+			if candles[i].High > allTimeHigh {
+				allTimeHigh = candles[i].High
+			}
+		}
+		if entry >= allTimeHigh*0.97 {
+			// Near all-time high territory, no overhead resistance
+			return roundTo2(entry + 3*risk), model.TargetTrailingStop, "接近歷史新高，建議移動停損"
+		}
+	} else {
+		allTimeLow := math.MaxFloat64
+		for i := 0; i < n-1; i++ {
+			if candles[i].Low < allTimeLow {
+				allTimeLow = candles[i].Low
+			}
+		}
+		if entry <= allTimeLow*1.03 {
+			return roundTo2(entry - 3*risk), model.TargetTrailingStop, "接近歷史新低，建議移動停損"
+		}
+	}
+
+	// ── Fallback: no valid target found, use conservative 2:1 ──
+	if dir == model.GapUp {
+		target = roundTo2(entry + 2*risk)
+	} else {
+		target = roundTo2(entry - 2*risk)
+	}
+	return target, model.TargetSwingPoint, "無明確壓力/支撐，預設 2:1 風報比"
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

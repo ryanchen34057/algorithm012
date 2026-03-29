@@ -20,6 +20,8 @@ export interface StockChartData {
 
 export type GapDirection = 'long' | 'short';
 
+export type TargetType = 'swing' | 'ma200' | 'ma20' | 'consolidation' | 'trailing_stop';
+
 export interface GapAnalysis {
   symbol: string;
   name: string;
@@ -35,6 +37,9 @@ export interface GapAnalysis {
   entryPrice: number;
   stopLoss: number;
   target: number;
+  targetType: TargetType;
+  targetLabel: string;
+  rewardRisk: number;
   adv20: number;
   todayVolume: number;
   ma20: number;

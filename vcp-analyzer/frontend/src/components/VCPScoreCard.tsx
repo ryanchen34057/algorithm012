@@ -54,7 +54,8 @@ export default function GapInfoCard({ gap }: Props) {
         <Stat label="現價" value={`$${gap.currentPrice}`} />
         <Stat label="進場點" value={`$${gap.entryPrice}`} color={c.blue} />
         <Stat label="停損點" value={`$${gap.stopLoss}`} color={c.red} />
-        <Stat label="目標價" value={`$${gap.target}`} color={c.green} />
+        <Stat label="目標價" value={`$${gap.target}`} color={c.green} sub={gap.targetLabel} />
+        <Stat label="風報比" value={gap.targetType === 'trailing_stop' ? '移動停損' : `1 : ${gap.rewardRisk}`} color={gap.rewardRisk >= 3 ? c.up : c.blue} />
         <Stat label="MA20" value={`$${gap.ma20}`} />
         <Stat label="MA200" value={`$${gap.ma200}`} />
         <Stat label="ADV20" value={`${gap.adv20.toLocaleString()}張`} />
@@ -65,12 +66,13 @@ export default function GapInfoCard({ gap }: Props) {
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+function Stat({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
   const c = useColors();
   return (
     <div>
       <div style={{ color: c.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
       <div style={{ fontWeight: 600, fontSize: 14, color: color ?? c.text }}>{value}</div>
+      {sub && <div style={{ color: c.textMuted, fontSize: 10, marginTop: 1 }}>{sub}</div>}
     </div>
   );
 }
