@@ -55,7 +55,7 @@ func (h *VCPHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	for _, s := range stocks {
 		wg.Add(1)
-		go func(symbol string) {
+		go func(symbol, chineseName string) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
@@ -67,8 +67,11 @@ func (h *VCPHandler) Scan(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			vcp := h.scanner.Analyze(chart)
+			if vcp != nil && chineseName != "" {
+				vcp.Name = chineseName
+			}
 			results <- result{vcp: vcp}
-		}(s.Symbol)
+		}(s.Symbol, s.Name)
 	}
 
 	go func() {

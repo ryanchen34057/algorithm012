@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { scanVCP } from '../services/api';
 import { VCPAnalysis } from '../types';
+import { useColors } from '../components/ThemeContext';
+import ThemeToggle from '../components/ThemeToggle';
 import VCPScoreCard from '../components/VCPScoreCard';
 
 interface ScanFilter {
@@ -10,6 +12,7 @@ interface ScanFilter {
 }
 
 export default function Dashboard() {
+  const c = useColors();
   const [stocks, setStocks] = useState<VCPAnalysis[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -38,19 +41,20 @@ export default function Dashboard() {
   };
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...S.page, background: c.bg }}>
       {/* Header */}
-      <div style={styles.header}>
+      <div style={S.header}>
         <div>
-          <h1 style={styles.title}>台股 VCP 分析系統</h1>
-          <p style={styles.subtitle}>
+          <h1 style={{ ...S.title, color: c.text }}>台股 VCP 分析系統</h1>
+          <p style={{ ...S.subtitle, color: c.textMuted }}>
             自動偵測符合 Mark Minervini VCP 型態的台灣上市櫃股票
           </p>
         </div>
+        <ThemeToggle />
       </div>
 
       {/* Filter bar */}
-      <div style={styles.filterBar}>
+      <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
         <FilterInput
           label="最低日均量（張）"
           value={filter.minVolume}
@@ -66,49 +70,53 @@ export default function Dashboard() {
         <button
           onClick={handleScan}
           disabled={loading}
-          style={{ ...styles.scanBtn, opacity: loading ? 0.7 : 1 }}
+          style={{ ...S.scanBtn, background: c.blue, opacity: loading ? 0.7 : 1 }}
         >
           {loading ? (
             <>
-              <span style={styles.spinner} />
+              <span style={S.spinner} />
               掃描中...
             </>
           ) : (
-            '🔍 掃描全市場'
+            '掃描全市場'
           )}
         </button>
       </div>
 
       {/* Legend */}
-      <div style={styles.legend}>
-        <LegendItem color="#22c55e" label="分數 ≥ 80：高品質 VCP" />
-        <LegendItem color="#f59e0b" label="分數 60-79：中等 VCP" />
-        <LegendItem color="#ef4444" label="分數 &lt; 60：低信心" />
+      <div style={S.legend}>
+        <LegendItem color={c.green} label="分數 ≥ 80：高品質 VCP" />
+        <LegendItem color={c.yellow} label="分數 60-79：中等 VCP" />
+        <LegendItem color={c.red} label="分數 < 60：低信心" />
       </div>
 
-      {error && <div style={styles.error}>{error}</div>}
+      {error && (
+        <div style={{ background: '#7f1d1d', color: '#fca5a5', padding: '12px 16px', borderRadius: 6, fontSize: 14 }}>
+          {error}
+        </div>
+      )}
 
       {loading && (
-        <div style={styles.loadingMsg}>
+        <div style={{ color: c.textSecondary, fontSize: 14, fontStyle: 'italic', lineHeight: 1.6 }}>
           正在從 TWSE / TPEx 抓取上市櫃股票清單，篩選後逐一向 Yahoo Finance
           取得歷史 K 線並分析 VCP 型態，股票數量較多時請耐心等待...
         </div>
       )}
 
       {scannedAt && !loading && (
-        <div style={styles.meta}>
+        <div style={{ color: c.textDim, fontSize: 13 }}>
           掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
           &nbsp;·&nbsp;符合篩選條件的股票共分析 {totalScanned} 支，找到{' '}
-          <strong style={{ color: '#f1f5f9' }}>{stocks.length}</strong> 支 VCP 型態
+          <strong style={{ color: c.text }}>{stocks.length}</strong> 支 VCP 型態
         </div>
       )}
 
       {/* Stock grid */}
-      <div style={styles.grid}>
+      <div style={S.grid}>
         {stocks.map((vcp) => (
           <div
             key={vcp.symbol}
-            style={styles.cardWrapper}
+            style={S.cardWrapper}
             onClick={() => navigate(`/stock/${encodeURIComponent(vcp.symbol)}`)}
           >
             <VCPScoreCard vcp={vcp} />
@@ -117,16 +125,16 @@ export default function Dashboard() {
       </div>
 
       {stocks.length === 0 && !loading && scannedAt && (
-        <div style={styles.empty}>
+        <div style={{ ...S.empty, color: c.textDim }}>
           目前沒有符合 VCP 型態的股票。<br />
           可以調低最低日均量或股價條件後再試。
         </div>
       )}
 
       {stocks.length === 0 && !loading && !scannedAt && (
-        <div style={styles.empty}>
+        <div style={{ ...S.empty, color: c.textDim }}>
           點擊「掃描全市場」開始分析台灣上市櫃股票。<br />
-          <span style={{ fontSize: 13, color: '#475569' }}>
+          <span style={{ fontSize: 13 }}>
             系統會先從 TWSE / TPEx 抓取完整股票清單，再依成交量與股價篩選後逐一分析。
           </span>
         </div>
@@ -146,30 +154,41 @@ function FilterInput({
   onChange: (v: number) => void;
   hint?: string;
 }) {
+  const c = useColors();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <label style={{ color: '#94a3b8', fontSize: 12 }}>{label}</label>
+      <label style={{ color: c.textSecondary, fontSize: 12 }}>{label}</label>
       <input
         type="number"
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={styles.filterInput}
+        style={{
+          background: c.bgInput,
+          border: `1px solid ${c.border}`,
+          borderRadius: 6,
+          color: c.text,
+          fontSize: 15,
+          padding: '7px 12px',
+          outline: 'none',
+          width: 120,
+        }}
       />
-      {hint && <span style={{ color: '#475569', fontSize: 11 }}>{hint}</span>}
+      {hint && <span style={{ color: c.textDim, fontSize: 11 }}>{hint}</span>}
     </div>
   );
 }
 
 function LegendItem({ color, label }: { color: string; label: string }) {
+  const c = useColors();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <div style={{ width: 12, height: 12, borderRadius: 2, background: color }} />
-      <span style={{ color: '#94a3b8', fontSize: 13 }}>{label}</span>
+      <span style={{ color: c.textSecondary, fontSize: 13 }}>{label}</span>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const S: Record<string, React.CSSProperties> = {
   page: {
     maxWidth: 1200,
     margin: '0 auto',
@@ -177,6 +196,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: 24,
+    minHeight: '100vh',
+    transition: 'background-color 0.2s',
   },
   header: {
     display: 'flex',
@@ -187,40 +208,27 @@ const styles: Record<string, React.CSSProperties> = {
   },
   title: {
     margin: 0,
-    color: '#f1f5f9',
     fontSize: 28,
     fontWeight: 800,
     letterSpacing: '-0.02em',
   },
   subtitle: {
     margin: '4px 0 0',
-    color: '#64748b',
     fontSize: 15,
   },
   filterBar: {
     display: 'flex',
     alignItems: 'flex-end',
     gap: 20,
-    background: '#1e293b',
     padding: '16px 20px',
     borderRadius: 8,
     flexWrap: 'wrap',
-  },
-  filterInput: {
-    background: '#0f172a',
-    border: '1px solid #334155',
-    borderRadius: 6,
-    color: '#f1f5f9',
-    fontSize: 15,
-    padding: '7px 12px',
-    outline: 'none',
-    width: 120,
+    border: '1px solid transparent',
   },
   scanBtn: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    background: '#3b82f6',
     color: '#fff',
     border: 'none',
     borderRadius: 8,
@@ -244,23 +252,6 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 20,
     flexWrap: 'wrap',
   },
-  error: {
-    background: '#7f1d1d',
-    color: '#fca5a5',
-    padding: '12px 16px',
-    borderRadius: 6,
-    fontSize: 14,
-  },
-  loadingMsg: {
-    color: '#94a3b8',
-    fontSize: 14,
-    fontStyle: 'italic',
-    lineHeight: 1.6,
-  },
-  meta: {
-    color: '#475569',
-    fontSize: 13,
-  },
   grid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
@@ -271,7 +262,6 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'transform 0.15s',
   },
   empty: {
-    color: '#475569',
     textAlign: 'center',
     padding: '60px 0',
     fontSize: 15,

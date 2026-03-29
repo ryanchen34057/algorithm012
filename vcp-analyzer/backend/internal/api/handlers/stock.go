@@ -32,6 +32,11 @@ func (h *StockHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Override with Chinese name if available
+	if cn := service.GetChineseName(symbol); cn != "" {
+		chart.Name = cn
+	}
+
 	writeJSON(w, chart)
 }
 
@@ -54,6 +59,10 @@ func (h *StockHandler) GetVCP(w http.ResponseWriter, r *http.Request) {
 	if vcp == nil {
 		http.Error(w, "no VCP pattern detected", http.StatusNotFound)
 		return
+	}
+
+	if cn := service.GetChineseName(symbol); cn != "" {
+		vcp.Name = cn
 	}
 
 	writeJSON(w, vcp)

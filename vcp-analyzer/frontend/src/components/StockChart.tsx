@@ -9,6 +9,7 @@ import {
   Time,
 } from 'lightweight-charts';
 import { StockChartData, VCPAnalysis } from '../types';
+import { useColors } from './ThemeContext';
 
 interface Props {
   chart: StockChartData;
@@ -18,6 +19,7 @@ interface Props {
 export default function StockChart({ chart, vcp }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const c = useColors();
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -26,41 +28,39 @@ export default function StockChart({ chart, vcp }: Props) {
 
     const lc = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#0f172a' },
-        textColor: '#94a3b8',
+        background: { type: ColorType.Solid, color: c.chartBg },
+        textColor: c.textSecondary,
       },
       grid: {
-        vertLines: { color: '#1e293b' },
-        horzLines: { color: '#1e293b' },
+        vertLines: { color: c.gridLine },
+        horzLines: { color: c.gridLine },
       },
       width: containerRef.current.clientWidth,
       height: 420,
-      timeScale: { borderColor: '#334155' },
+      timeScale: { borderColor: c.border },
     });
     chartRef.current = lc;
 
-    // ── Candlestick series ──────────────────────────────────────────────
     const candleSeries = lc.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
+      upColor: c.green,
+      downColor: c.red,
       borderVisible: false,
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
+      wickUpColor: c.green,
+      wickDownColor: c.red,
     });
 
     candleSeries.setData(
-      chart.candles.map((c) => ({
-        time: c.date as Time,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
+      chart.candles.map((d) => ({
+        time: d.date as Time,
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
       }))
     );
 
-    // ── Volume histogram ────────────────────────────────────────────────
     const volumeSeries = lc.addSeries(HistogramSeries, {
-      color: '#334155',
+      color: c.border,
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
     });
@@ -68,14 +68,13 @@ export default function StockChart({ chart, vcp }: Props) {
       scaleMargins: { top: 0.8, bottom: 0 },
     });
     volumeSeries.setData(
-      chart.candles.map((c) => ({
-        time: c.date as Time,
-        value: c.volume,
-        color: c.close >= c.open ? '#16a34a44' : '#dc262644',
+      chart.candles.map((d) => ({
+        time: d.date as Time,
+        value: d.volume,
+        color: d.close >= d.open ? c.green + '44' : c.red + '44',
       }))
     );
 
-    // ── Moving averages ─────────────────────────────────────────────────
     const maConfigs = [
       { data: chart.ma50, color: '#f59e0b', title: 'MA50' },
       { data: chart.ma150, color: '#a78bfa', title: 'MA150' },
@@ -85,36 +84,35 @@ export default function StockChart({ chart, vcp }: Props) {
       const maSeries = lc.addSeries(LineSeries, { color, lineWidth: 1, title });
       maSeries.setData(
         chart.candles
-          .map((c, i) => ({ time: c.date as Time, value: data[i] }))
+          .map((d, i) => ({ time: d.date as Time, value: data[i] }))
           .filter((d) => d.value > 0)
       );
     }
 
-    // ── VCP price lines ─────────────────────────────────────────────────
     if (vcp) {
       candleSeries.createPriceLine({
         price: vcp.entryPrice,
-        color: '#3b82f6',
+        color: c.blue,
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `Entry ${vcp.entryPrice}`,
+        title: `進場 ${vcp.entryPrice}`,
       });
       candleSeries.createPriceLine({
         price: vcp.stopLoss,
-        color: '#ef4444',
+        color: c.red,
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `Stop ${vcp.stopLoss}`,
+        title: `停損 ${vcp.stopLoss}`,
       });
       candleSeries.createPriceLine({
         price: vcp.target,
-        color: '#22c55e',
+        color: c.green,
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `Target ${vcp.target}`,
+        title: `目標 ${vcp.target}`,
       });
     }
 
@@ -131,7 +129,7 @@ export default function StockChart({ chart, vcp }: Props) {
       ro.disconnect();
       lc.remove();
     };
-  }, [chart, vcp]);
+  }, [chart, vcp, c]);
 
   return (
     <div

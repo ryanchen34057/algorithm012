@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getChart, getVCP } from '../services/api';
 import { StockChartData, VCPAnalysis } from '../types';
+import { useColors } from '../components/ThemeContext';
+import ThemeToggle from '../components/ThemeToggle';
 import StockChart from '../components/StockChart';
 import VCPScoreCard from '../components/VCPScoreCard';
 import RiskCalculator from '../components/RiskCalculator';
@@ -9,6 +11,7 @@ import RiskCalculator from '../components/RiskCalculator';
 export default function StockDetail() {
   const { symbol } = useParams<{ symbol: string }>();
   const navigate = useNavigate();
+  const c = useColors();
 
   const [chart, setChart] = useState<StockChartData | null>(null);
   const [vcp, setVcp] = useState<VCPAnalysis | null>(null);
@@ -33,18 +36,18 @@ export default function StockDetail() {
 
   if (loading) {
     return (
-      <div style={styles.center}>
-        <div style={styles.loadingText}>載入中...</div>
+      <div style={{ ...S.center, background: c.bg }}>
+        <div style={{ color: c.textSecondary, fontSize: 18 }}>載入中...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={styles.center}>
-        <div style={styles.errorBox}>{error}</div>
-        <button style={styles.backBtn} onClick={() => navigate('/')}>
-          ← 返回
+      <div style={{ ...S.center, background: c.bg }}>
+        <div style={{ background: '#7f1d1d', color: '#fca5a5', padding: '12px 20px', borderRadius: 6 }}>{error}</div>
+        <button style={{ ...S.backBtn, borderColor: c.border, color: c.textSecondary }} onClick={() => navigate('/')}>
+          返回
         </button>
       </div>
     );
@@ -52,37 +55,41 @@ export default function StockDetail() {
 
   if (!chart || !vcp) return null;
 
-  return (
-    <div style={styles.page}>
-      {/* Back button */}
-      <button style={styles.backBtn} onClick={() => navigate('/')}>
-        ← 返回列表
-      </button>
+  const code = vcp.symbol.replace(/\.(TW|TWO)$/, '');
 
-      {/* Page title */}
-      <div style={styles.header}>
-        <h2 style={styles.title}>
-          {vcp.symbol}
-          <span style={styles.name}>{vcp.name}</span>
-        </h2>
-        <div style={styles.currentPrice}>${vcp.currentPrice}</div>
+  return (
+    <div style={{ ...S.page, background: c.bg }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <button style={{ ...S.backBtn, borderColor: c.border, color: c.textSecondary }} onClick={() => navigate('/')}>
+          ← 返回列表
+        </button>
+        <ThemeToggle />
       </div>
 
-      {/* K-line chart */}
-      <div style={styles.chartBox}>
+      {/* Title */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <h2 style={{ margin: 0, color: c.text, fontSize: 24, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 12 }}>
+          {code}
+          <span style={{ fontSize: 16, color: c.textMuted, fontWeight: 400 }}>{vcp.name}</span>
+        </h2>
+        <div style={{ fontSize: 28, fontWeight: 800, color: c.green }}>${vcp.currentPrice}</div>
+      </div>
+
+      {/* Chart */}
+      <div style={{ background: c.chartBg, borderRadius: 8, overflow: 'hidden', padding: 16, display: 'flex', flexDirection: 'column', gap: 8, border: `1px solid ${c.border}` }}>
         <StockChart chart={chart} vcp={vcp} />
-        <div style={styles.chartLegend}>
-          <LegendLine color="#f59e0b" label="MA50" />
-          <LegendLine color="#a78bfa" label="MA150" />
-          <LegendLine color="#f472b6" label="MA200" />
-          <LegendLine color="#3b82f6" label="進場點 (虛線)" dashed />
-          <LegendLine color="#ef4444" label="停損點 (虛線)" dashed />
-          <LegendLine color="#22c55e" label="目標價 (虛線)" dashed />
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', paddingTop: 8 }}>
+          <Legend color="#f59e0b" label="MA50" />
+          <Legend color="#a78bfa" label="MA150" />
+          <Legend color="#f472b6" label="MA200" />
+          <Legend color={c.blue} label="進場點 (虛線)" dashed />
+          <Legend color={c.red} label="停損點 (虛線)" dashed />
+          <Legend color={c.green} label="目標價 (虛線)" dashed />
         </div>
       </div>
 
-      {/* VCP analysis + Risk calculator side by side */}
-      <div style={styles.bottomRow}>
+      {/* VCP + Risk calculator */}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 340px' }}>
           <VCPScoreCard vcp={vcp} />
         </div>
@@ -91,44 +98,34 @@ export default function StockDetail() {
         </div>
       </div>
 
-      {/* Contraction details table */}
-      <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>收縮詳情</h3>
-        <table style={styles.table}>
+      {/* Contraction table */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <h3 style={{ margin: 0, color: c.text, fontSize: 16, fontWeight: 700 }}>收縮詳情</h3>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: c.bgCard, borderRadius: 8, overflow: 'hidden' }}>
           <thead>
             <tr>
-              {['收縮', '高點日期', '高點價格', '低點日期', '低點價格', '回檔幅度', '期間均量'].map(
-                (h) => (
-                  <th key={h} style={styles.th}>
-                    {h}
-                  </th>
-                )
-              )}
+              {['收縮', '高點日期', '高點價格', '低點日期', '低點價格', '回檔幅度', '期間均量'].map((h) => (
+                <th key={h} style={{ background: c.bgInput, color: c.textMuted, fontSize: 12, textTransform: 'uppercase', padding: '10px 16px', textAlign: 'left' }}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {vcp.contractions.map((c) => (
-              <tr key={c.index} style={styles.tr}>
-                <td style={styles.td}>C{c.index}</td>
-                <td style={styles.td}>{c.highDate}</td>
-                <td style={styles.td}>${c.highPrice}</td>
-                <td style={styles.td}>{c.lowDate}</td>
-                <td style={styles.td}>${c.lowPrice}</td>
-                <td
-                  style={{
-                    ...styles.td,
-                    color:
-                      c.depth <= 6
-                        ? '#22c55e'
-                        : c.depth <= 12
-                        ? '#f59e0b'
-                        : '#ef4444',
-                    fontWeight: 700,
-                  }}
-                >
-                  {c.depth.toFixed(1)}%
+            {vcp.contractions.map((con) => (
+              <tr key={con.index} style={{ borderBottom: `1px solid ${c.border}` }}>
+                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>C{con.index}</td>
+                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>{con.highDate}</td>
+                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>${con.highPrice}</td>
+                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>{con.lowDate}</td>
+                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>${con.lowPrice}</td>
+                <td style={{
+                  padding: '10px 16px', fontSize: 14, fontWeight: 700,
+                  color: con.depth <= 6 ? c.green : con.depth <= 12 ? c.yellow : c.red,
+                }}>
+                  {con.depth.toFixed(1)}%
                 </td>
-                <td style={styles.td}>{c.avgVolume.toLocaleString()}</td>
+                <td style={{ padding: '10px 16px', color: c.textSecondary, fontSize: 14 }}>{con.avgVolume.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
@@ -138,32 +135,17 @@ export default function StockDetail() {
   );
 }
 
-function LegendLine({
-  color,
-  label,
-  dashed,
-}: {
-  color: string;
-  label: string;
-  dashed?: boolean;
-}) {
+function Legend({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
+  const c = useColors();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div
-        style={{
-          width: 20,
-          height: 2,
-          background: color,
-          borderTop: dashed ? `2px dashed ${color}` : undefined,
-          opacity: dashed ? 0.8 : 1,
-        }}
-      />
-      <span style={{ color: '#94a3b8', fontSize: 12 }}>{label}</span>
+      <div style={{ width: 20, height: 2, background: color, borderTop: dashed ? `2px dashed ${color}` : undefined, opacity: dashed ? 0.8 : 1 }} />
+      <span style={{ color: c.textSecondary, fontSize: 12 }}>{label}</span>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const S: Record<string, React.CSSProperties> = {
   page: {
     maxWidth: 1200,
     margin: '0 auto',
@@ -171,114 +153,23 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: 24,
+    minHeight: '100vh',
+    transition: 'background-color 0.2s',
   },
   center: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '60vh',
+    height: '100vh',
     gap: 16,
-  },
-  loadingText: {
-    color: '#94a3b8',
-    fontSize: 18,
-  },
-  errorBox: {
-    background: '#7f1d1d',
-    color: '#fca5a5',
-    padding: '12px 20px',
-    borderRadius: 6,
   },
   backBtn: {
     background: 'transparent',
-    border: '1px solid #334155',
-    color: '#94a3b8',
+    border: '1px solid',
     borderRadius: 6,
     padding: '8px 16px',
     cursor: 'pointer',
-    fontSize: 14,
-    alignSelf: 'flex-start',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  title: {
-    margin: 0,
-    color: '#f1f5f9',
-    fontSize: 24,
-    fontWeight: 800,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-  },
-  name: {
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: 400,
-  },
-  currentPrice: {
-    fontSize: 28,
-    fontWeight: 800,
-    color: '#22c55e',
-  },
-  chartBox: {
-    background: '#0f172a',
-    borderRadius: 8,
-    overflow: 'hidden',
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
-  chartLegend: {
-    display: 'flex',
-    gap: 16,
-    flexWrap: 'wrap',
-    paddingTop: 8,
-  },
-  bottomRow: {
-    display: 'flex',
-    gap: 16,
-    flexWrap: 'wrap',
-  },
-  section: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  sectionTitle: {
-    margin: 0,
-    color: '#f1f5f9',
-    fontSize: 16,
-    fontWeight: 700,
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    background: '#1e293b',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  th: {
-    background: '#0f172a',
-    color: '#64748b',
-    fontSize: 12,
-    textTransform: 'uppercase',
-    padding: '10px 16px',
-    textAlign: 'left',
-    letterSpacing: '0.04em',
-  },
-  tr: {
-    borderBottom: '1px solid #334155',
-  },
-  td: {
-    padding: '10px 16px',
-    color: '#cbd5e1',
     fontSize: 14,
   },
 };

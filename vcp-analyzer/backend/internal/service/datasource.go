@@ -153,6 +153,8 @@ func FetchAllStocks(minVolumeLots int64, minPrice float64) []model.StockInfo {
 	}
 
 	all := append(twse, tpex...)
+	// Cache Chinese names for single-stock lookups
+	SetNames(all)
 	log.Printf("[stock list] TWSE=%d TPEx=%d total=%d (minVol=%d張 minPrice=%.0f)",
 		len(twse), len(tpex), len(all), minVolumeLots, minPrice)
 	return all
