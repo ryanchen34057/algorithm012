@@ -183,11 +183,6 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 		}
 	}
 
-	// 風報比 < 2:1 的交易不值得做（移動停損類型除外）
-	if targetType != model.TargetTrailingStop && rr < 2.0 {
-		return nil
-	}
-
 	// ── Score ────────────────────────────────────────────────────────────
 	score := calcGapScore(gapPct, adv20Lots, todayVolLots, ma20Today, ma200Today, today, yesterday, direction)
 

@@ -25,14 +25,19 @@ func corsMiddleware(next http.Handler) http.Handler {
 func NewRouter() http.Handler {
 	ds := service.NewYahooFinance()
 	scanner := service.NewGapScanner()
+	breakoutScanner := service.NewBreakoutScanner()
 
 	stockH := handlers.NewStockHandler(ds, scanner)
 	gapH := handlers.NewGapHandler(ds, scanner)
+	breakoutH := handlers.NewBreakoutHandler(ds, breakoutScanner)
 
 	mux := http.NewServeMux()
 
 	// Gap scan (scans full market)
 	mux.HandleFunc("/api/gap/scan", gapH.Scan)
+
+	// Breakout scan (scans full market)
+	mux.HandleFunc("/api/breakout/scan", breakoutH.Scan)
 
 	// Per-stock endpoints
 	mux.HandleFunc("/api/stock/", func(w http.ResponseWriter, r *http.Request) {

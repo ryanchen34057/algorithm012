@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ScanResult, StockChartData, GapAnalysis, PositionResult } from '../types';
+import { ScanResult, StockChartData, GapAnalysis, PositionResult, BreakoutScanResult, VolumeCondition, PatternType } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8090';
 
@@ -24,6 +24,26 @@ export const scanGap = (params: ScanParams = {}): Promise<ScanResult> => {
     if (val !== undefined) p.set(key, String(val));
   }
   return api.get<ScanResult>(`/api/gap/scan?${p.toString()}`).then(r => r.data);
+};
+
+export interface BreakoutScanParams {
+  minPrice?: number;
+  maxPrice?: number;
+  minVolume?: number;
+  lookbackDays?: number;
+  nearHighPct?: number;
+  pattern?: PatternType;
+  volumeFilter?: VolumeCondition;
+  volumeFactor?: number;
+  concurrency?: number;
+}
+
+export const scanBreakout = (params: BreakoutScanParams = {}): Promise<BreakoutScanResult> => {
+  const p = new URLSearchParams();
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined) p.set(key, String(val));
+  }
+  return api.get<BreakoutScanResult>(`/api/breakout/scan?${p.toString()}`).then(r => r.data);
 };
 
 export const getChart = (symbol: string): Promise<StockChartData> =>

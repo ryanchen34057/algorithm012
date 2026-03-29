@@ -54,6 +54,52 @@ export interface ScanResult {
   scanned: number;  // total stocks analyzed
 }
 
+// ── Breakout Scanner ──
+
+export type PatternType = 'w_bottom' | 'v_bottom' | 'none';
+export type VolumeCondition = 'expand' | 'shrink' | 'any';
+
+export interface BreakoutAnalysis {
+  symbol: string;
+  name: string;
+  currentPrice: number;
+  prevHigh: number;
+  prevHighDate: string;
+  distPct: number;
+  pattern: PatternType;
+  patternLabel: string;
+  low1: number;
+  low1Date: string;
+  low2: number;
+  low2Date: string;
+  neckline: number;
+  vLow: number;
+  vLowDate: string;
+  dropPct: number;
+  bouncePct: number;
+  ma20: number;
+  ma50: number;
+  ma150: number;
+  ma200: number;
+  maAligned: boolean;
+  adv20: number;
+  recentVolRatio: number;
+  todayVolume: number;
+  entryPrice: number;
+  stopLoss: number;
+  target: number;
+  targetLabel: string;
+  rewardRisk: number;
+  score: number;
+}
+
+export interface BreakoutScanResult {
+  stocks: BreakoutAnalysis[];
+  scannedAt: string;
+  total: number;
+  scanned: number;
+}
+
 export interface PositionResult {
   symbol: string;
   entryPrice: number;
