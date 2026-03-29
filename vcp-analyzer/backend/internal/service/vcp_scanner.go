@@ -57,19 +57,13 @@ func (s *VCPScanner) Analyze(chart *model.StockChartData) *model.VCPAnalysis {
 	entry := roundTo2(pivot * 1.01)    // 1% above pivot
 	stopLoss := roundTo2(entry * 0.92) // 8% below entry
 
-	// Target: based on 50% of the prior advance before the VCP formed.
-	// Subsequent moves after a VCP breakout typically achieve about half
-	// of the prior rally's magnitude. Clamped between 15% and 40%.
-	firstC := contractions[0]
-	priorAdvancePct := calcPriorAdvance(lows, candles, firstC)
-	expectedMove := priorAdvancePct * 0.5 // use half of prior advance
-	if expectedMove < 0.15 {
-		expectedMove = 0.15 // floor 15%
-	}
-	if expectedMove > 0.40 {
-		expectedMove = 0.40 // cap 40%
-	}
-	target := roundTo2(entry * (1 + expectedMove))
+	// Target: Minervini's minimum R:R = 3:1
+	// target = entry + 3 × (entry - stopLoss)
+	// This is not a fixed exit point — Minervini uses trailing stops
+	// (10MA / 21MA) to let winners run. This target represents the
+	// minimum expected reward needed to justify the trade.
+	riskPerShare := entry - stopLoss
+	target := roundTo2(entry + 3*riskPerShare)
 
 	// ── Step 5: Score ─────────────────────────────────────────────────────
 	score := calcScore(contractions, passesTrend, volumeDryUp)
@@ -215,42 +209,6 @@ func detectContractions(
 	}
 
 	return contractions
-}
-
-// calcPriorAdvance computes the % advance that occurred before the VCP started.
-// It finds the first contraction's high in the candle array, then scans back
-// up to 120 bars to find the lowest low. The advance % = (high - low) / low.
-//
-// Example: stock rallied from $40 to $60 before the first contraction →
-// priorAdvancePct = (60-40)/40 = 0.50 → target = entry × 1.50
-func calcPriorAdvance(lows []float64, candles []model.OHLCV, firstC model.Contraction) float64 {
-	// Find the candle index matching the first contraction's high date
-	highIdx := -1
-	for i, c := range candles {
-		if c.Date == firstC.HighDate {
-			highIdx = i
-			break
-		}
-	}
-	if highIdx <= 0 {
-		return 0.25 // fallback
-	}
-
-	// Scan backwards up to 120 bars to find the lowest low before the rally
-	lookback := 120
-	scanStart := max(0, highIdx-lookback)
-	lowestLow := lows[scanStart]
-	for i := scanStart; i < highIdx; i++ {
-		if lows[i] < lowestLow {
-			lowestLow = lows[i]
-		}
-	}
-
-	if lowestLow <= 0 {
-		return 0.25
-	}
-
-	return (firstC.HighPrice - lowestLow) / lowestLow
 }
 
 // filterDecreasing finds the longest tail of the slice where depths are

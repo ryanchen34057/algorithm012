@@ -20,7 +20,7 @@ type VCPAnalysis struct {
 	PivotPrice   float64       `json:"pivotPrice"`   // breakout level
 	EntryPrice   float64       `json:"entryPrice"`   // pivot + 1% buffer
 	StopLoss     float64       `json:"stopLoss"`     // 7-8% below entry
-	Target       float64       `json:"target"`       // 20-25% above entry
+	Target       float64       `json:"target"`       // min R:R 3:1 expected reward
 	CurrentPrice float64       `json:"currentPrice"`
 	AvgVolume50  float64       `json:"avgVolume50"`
 	Stage2       bool          `json:"stage2"`       // passes trend template
