@@ -8,8 +8,8 @@ interface Props {
 export default function GapInfoCard({ gap }: Props) {
   const c = useColors();
   const isLong = gap.direction === 'long';
-  const dirColor = isLong ? c.green : c.red;
-  const scoreColor = gap.score >= 70 ? c.green : gap.score >= 50 ? c.yellow : c.red;
+  const dirColor = isLong ? c.up : c.down;
+  const scoreColor = gap.score >= 70 ? c.up : gap.score >= 50 ? c.yellow : c.down;
 
   const code = gap.symbol.replace(/\.(TW|TWO)$/, '');
 

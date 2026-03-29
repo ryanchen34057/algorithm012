@@ -5,6 +5,8 @@ import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import StockRow from '../components/StockRow';
 
+type DirectionFilter = 'all' | 'long' | 'short';
+
 interface ScanFilter {
   minPrice: number;
   maxPrice: number;
@@ -15,6 +17,7 @@ interface ScanFilter {
   strictGap: boolean;
   requireCandle: boolean;
   requireBothMA: boolean;
+  direction: DirectionFilter;
 }
 
 const DEFAULTS: ScanFilter = {
@@ -27,6 +30,7 @@ const DEFAULTS: ScanFilter = {
   strictGap: false,
   requireCandle: true,
   requireBothMA: false,
+  direction: 'all',
 };
 
 export default function Dashboard() {
@@ -130,6 +134,26 @@ export default function Dashboard() {
               onLabel="同時符合 MA20 & MA200"
               offLabel="任一即可（建議）"
             />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ color: c.textSecondary, fontSize: 12, minWidth: 50 }}>方向篩選</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {([['all', '全部'], ['long', '做多'], ['short', '做空']] as const).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => setFilter((f) => ({ ...f, direction: val }))}
+                    style={{
+                      background: filter.direction === val ? c.blue : 'transparent',
+                      color: filter.direction === val ? '#fff' : c.textSecondary,
+                      border: `1px solid ${filter.direction === val ? c.blue : c.border}`,
+                      borderRadius: 4, padding: '4px 12px', fontSize: 12,
+                      fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -160,8 +184,8 @@ export default function Dashboard() {
 
       {/* Legend */}
       <div style={S.legend}>
-        <LegendItem color={c.green} label="Gap Up (做多訊號)" />
-        <LegendItem color={c.red} label="Gap Down (做空訊號)" />
+        <LegendItem color={c.up} label="Gap Up (做多訊號)" />
+        <LegendItem color={c.down} label="Gap Down (做空訊號)" />
         <LegendItem color={c.yellow} label="分數越高品質越好" />
       </div>
 
@@ -197,10 +221,18 @@ export default function Dashboard() {
 
       {/* Stock list with charts */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {stocks.map((gap) => (
-          <StockRow key={gap.symbol} gap={gap} />
-        ))}
+        {stocks
+          .filter((g) => filter.direction === 'all' || g.direction === filter.direction)
+          .map((gap) => (
+            <StockRow key={gap.symbol} gap={gap} />
+          ))}
       </div>
+
+      {stocks.filter((g) => filter.direction === 'all' || g.direction === filter.direction).length === 0 && stocks.length > 0 && !loading && scannedAt && (
+        <div style={{ ...S.empty, color: c.textDim }}>
+          目前篩選方向下沒有符合條件的股票，試試切換「全部」。
+        </div>
+      )}
 
       {stocks.length === 0 && !loading && scannedAt && (
         <div style={{ ...S.empty, color: c.textDim }}>

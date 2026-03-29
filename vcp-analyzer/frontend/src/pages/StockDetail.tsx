@@ -57,7 +57,7 @@ export default function StockDetail() {
 
   const code = gap.symbol.replace(/\.(TW|TWO)$/, '');
   const isLong = gap.direction === 'long';
-  const dirColor = isLong ? c.green : c.red;
+  const dirColor = isLong ? c.up : c.down;
 
   return (
     <div style={{ ...S.page, background: c.bg }}>

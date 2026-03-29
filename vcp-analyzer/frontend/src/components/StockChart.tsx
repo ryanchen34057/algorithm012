@@ -52,12 +52,13 @@ export default function StockChart({ chart, gap }: Props) {
     chartRef.current = lc;
 
     // ── Candlestick ─────────────────────────────────────────────────────
+    // 台股慣例：紅漲綠跌
     const candleSeries = lc.addSeries(CandlestickSeries, {
-      upColor: c.green,
-      downColor: c.red,
+      upColor: c.up,
+      downColor: c.down,
       borderVisible: false,
-      wickUpColor: c.green,
-      wickDownColor: c.red,
+      wickUpColor: c.up,
+      wickDownColor: c.down,
     });
 
     candleSeries.setData(
@@ -83,7 +84,7 @@ export default function StockChart({ chart, gap }: Props) {
       chart.candles.map((d) => ({
         time: d.date as Time,
         value: d.volume,
-        color: d.close >= d.open ? c.green + '44' : c.red + '44',
+        color: d.close >= d.open ? c.up + '44' : c.down + '44',
       }))
     );
 

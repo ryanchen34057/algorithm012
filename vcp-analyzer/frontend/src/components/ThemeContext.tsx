@@ -50,6 +50,8 @@ export const colors = {
     textSecondary: '#94a3b8',
     textMuted:   '#64748b',
     textDim:     '#475569',
+    up:          '#ef4444',   // 台股：紅色漲
+    down:        '#22c55e',   // 台股：綠色跌
     green:       '#22c55e',
     red:         '#ef4444',
     blue:        '#3b82f6',
@@ -68,6 +70,8 @@ export const colors = {
     textSecondary: '#475569',
     textMuted:   '#64748b',
     textDim:     '#94a3b8',
+    up:          '#dc2626',   // 台股：紅色漲
+    down:        '#16a34a',   // 台股：綠色跌
     green:       '#16a34a',
     red:         '#dc2626',
     blue:        '#2563eb',

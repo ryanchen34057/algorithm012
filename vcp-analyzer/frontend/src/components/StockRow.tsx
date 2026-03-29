@@ -25,7 +25,7 @@ export default function StockRow({ gap }: Props) {
 
   const code = gap.symbol.replace(/\.(TW|TWO)$/, '');
   const isLong = gap.direction === 'long';
-  const dirColor = isLong ? c.green : c.red;
+  const dirColor = isLong ? c.up : c.down;
   const dirLabel = isLong ? 'Gap Up' : 'Gap Down';
   const dirChinese = isLong ? '做多' : '做空';
 
@@ -71,8 +71,8 @@ export default function StockRow({ gap }: Props) {
           </span>
           {/* Score badge */}
           <div style={{
-            background: (gap.score >= 70 ? c.green : gap.score >= 50 ? c.yellow : c.red) + '18',
-            color: gap.score >= 70 ? c.green : gap.score >= 50 ? c.yellow : c.red,
+            background: (gap.score >= 70 ? c.up : gap.score >= 50 ? c.yellow : c.down) + '18',
+            color: gap.score >= 70 ? c.up : gap.score >= 50 ? c.yellow : c.down,
             borderRadius: 6,
             padding: '4px 12px',
             fontWeight: 800,

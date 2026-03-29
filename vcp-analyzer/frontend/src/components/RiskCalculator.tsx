@@ -38,7 +38,7 @@ export default function RiskCalculator({ gap }: Props) {
     <div style={{ background: c.bgCard, borderRadius: 8, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, border: `1px solid ${c.border}` }}>
       <h3 style={{ margin: 0, color: c.text, fontSize: 18, fontWeight: 700 }}>
         風險計算器
-        <span style={{ fontSize: 13, fontWeight: 400, color: isLong ? c.green : c.red, marginLeft: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 400, color: isLong ? c.up : c.down, marginLeft: 8 }}>
           ({isLong ? '做多' : '做空'})
         </span>
       </h3>
