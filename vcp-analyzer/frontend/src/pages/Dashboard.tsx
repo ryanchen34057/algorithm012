@@ -46,7 +46,7 @@ export default function Dashboard() {
       });
       setStocks(result.stocks ?? []);
       setScannedAt(result.scannedAt);
-      setTotalScanned(result.total);
+      setTotalScanned(result.scanned);
     } catch (e: unknown) {
       setError('掃描失敗：無法連線到後端伺服器，請確認後端是否已啟動');
       console.error(e);

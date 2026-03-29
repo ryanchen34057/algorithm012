@@ -35,5 +35,6 @@ type GapAnalysis struct {
 type ScanResult struct {
 	Stocks    []GapAnalysis `json:"stocks"`
 	ScannedAt string        `json:"scannedAt"`
-	Total     int           `json:"total"`
+	Total     int           `json:"total"`   // number of matched stocks
+	Scanned   int           `json:"scanned"` // number of stocks analyzed
 }

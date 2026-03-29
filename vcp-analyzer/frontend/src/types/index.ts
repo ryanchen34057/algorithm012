@@ -45,7 +45,8 @@ export interface GapAnalysis {
 export interface ScanResult {
   stocks: GapAnalysis[];
   scannedAt: string;
-  total: number;
+  total: number;    // matched count
+  scanned: number;  // total stocks analyzed
 }
 
 export interface PositionResult {

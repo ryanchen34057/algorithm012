@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log"
 	"math"
 	"sort"
 
@@ -45,7 +46,8 @@ func NewGapScanner() *GapScanner { return &GapScanner{} }
 // Returns nil if the stock does not qualify.
 func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) *model.GapAnalysis {
 	candles := chart.Candles
-	if len(candles) < 201 { // need at least 200+1 bars for MA200 + today
+	if len(candles) < 201 {
+		log.Printf("[gap] %s: skipped — only %d candles (need 201+)", chart.Symbol, len(candles))
 		return nil
 	}
 
@@ -54,12 +56,13 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	yesterday := candles[n-2]
 
 	// ── Basic filters ────────────────────────────────────────────────────
-	// Use real-time price from Yahoo meta if available
 	currentPrice := chart.LatestPrice
 	if currentPrice == 0 {
 		currentPrice = today.Close
 	}
 	if currentPrice < params.MinPrice || currentPrice > params.MaxPrice {
+		log.Printf("[gap] %s: skipped — price %.2f outside [%.0f, %.0f]",
+			chart.Symbol, currentPrice, params.MinPrice, params.MaxPrice)
 		return nil
 	}
 
@@ -67,12 +70,16 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	adv20Shares := avgVolumeN(candles, 20)
 	adv20Lots := adv20Shares / 1000.0
 	if adv20Lots < params.MinADV20Lots {
+		log.Printf("[gap] %s: skipped — ADV20 %.0f張 < %.0f張",
+			chart.Symbol, adv20Lots, params.MinADV20Lots)
 		return nil
 	}
 
 	// Today's volume proxy for opening momentum (張)
 	todayVolLots := float64(today.Volume) / 1000.0
 	if todayVolLots < params.MinTodayVolLots {
+		log.Printf("[gap] %s: skipped — today vol %.0f張 < %.0f張",
+			chart.Symbol, todayVolLots, params.MinTodayVolLots)
 		return nil
 	}
 
@@ -80,11 +87,13 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	ma20 := chart.MA20
 	ma200 := chart.MA200
 	if len(ma20) < n || len(ma200) < n {
+		log.Printf("[gap] %s: skipped — MA data length mismatch", chart.Symbol)
 		return nil
 	}
 	ma20Today := ma20[n-1]
 	ma200Today := ma200[n-1]
 	if ma20Today == 0 || ma200Today == 0 {
+		log.Printf("[gap] %s: skipped — MA20=%.2f MA200=%.2f (zero)", chart.Symbol, ma20Today, ma200Today)
 		return nil
 	}
 
@@ -96,13 +105,19 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	gapUpOK := yesterday.Close < yesterday.Open && // 昨日陰線
 		today.Open > yesterday.High && // 跳空過昨高
 		gapPct > params.MinGapPct && gapPct < params.MaxGapPct &&
-		today.Open > ma20Today && today.Open > ma200Today // 開盤 > MA20 & MA200
+		today.Open > ma20Today && today.Open > ma200Today
 
 	// Condition B: Shock Gap Down (Short)
 	gapDownOK := yesterday.Close > yesterday.Open && // 昨日陽線
 		today.Open < yesterday.Low && // 跳空破昨低
 		gapPct < -params.MinGapPct && gapPct > -params.MaxGapPct &&
-		today.Open < ma20Today && today.Open < ma200Today // 開盤 < MA20 & MA200
+		today.Open < ma20Today && today.Open < ma200Today
+
+	if !gapUpOK && !gapDownOK {
+		log.Printf("[gap] %s: skipped — no gap pattern (gap=%.2f%%, yOpen=%.2f yCl=%.2f yHi=%.2f yLo=%.2f tOpen=%.2f MA20=%.2f MA200=%.2f)",
+			chart.Symbol, gapPct, yesterday.Open, yesterday.Close, yesterday.High, yesterday.Low,
+			today.Open, ma20Today, ma200Today)
+	}
 
 	if gapUpOK {
 		direction = model.GapUp

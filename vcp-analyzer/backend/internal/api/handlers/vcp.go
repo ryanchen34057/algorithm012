@@ -49,12 +49,20 @@ func (h *GapHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	}
 	concurrency := parseInt(q.Get("concurrency"), 10)
 
-	log.Printf("[scan] fetching stock list (minVol=%.0f張 minPrice=%.0f)...", params.MinADV20Lots, params.MinPrice)
-	stocks := service.FetchAllStocks(int64(params.MinADV20Lots), params.MinPrice)
+	// Pre-filter uses a relaxed volume threshold: min(user's ADV20, 100) so
+	// the stock list isn't wiped out on weekends when TWSE/TPEx return zero or
+	// stale volume. The real ADV20 check happens inside the scanner with Yahoo data.
+	preFilterVol := int64(params.MinADV20Lots)
+	if preFilterVol > 100 {
+		preFilterVol = 100
+	}
+	log.Printf("[scan] fetching stock list (preFilterVol=%d張 minPrice=%.0f)...", preFilterVol, params.MinPrice)
+	stocks := service.FetchAllStocks(preFilterVol, params.MinPrice)
 	log.Printf("[scan] %d stocks to analyse", len(stocks))
 
 	type result struct {
-		gap *model.GapAnalysis
+		gap     *model.GapAnalysis
+		fetched bool // true if Yahoo Finance data was successfully fetched
 	}
 
 	results := make(chan result, len(stocks))
@@ -78,7 +86,7 @@ func (h *GapHandler) Scan(w http.ResponseWriter, r *http.Request) {
 			if gap != nil && chineseName != "" {
 				gap.Name = chineseName
 			}
-			results <- result{gap: gap}
+			results <- result{gap: gap, fetched: true}
 		}(s.Symbol, s.Name)
 	}
 
@@ -88,18 +96,24 @@ func (h *GapHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	var gapStocks []model.GapAnalysis
+	scannedCount := 0
 	for r := range results {
+		if r.fetched {
+			scannedCount++
+		}
 		if r.gap != nil {
 			gapStocks = append(gapStocks, *r.gap)
 		}
 	}
 
+	log.Printf("[scan] scanned %d stocks, found %d gap patterns", scannedCount, len(gapStocks))
 	service.SortByScore(gapStocks)
 
 	writeJSON(w, model.ScanResult{
 		Stocks:    gapStocks,
 		ScannedAt: time.Now().Format(time.RFC3339),
 		Total:     len(gapStocks),
+		Scanned:   scannedCount,
 	})
 }
 
