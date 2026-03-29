@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { scanVCP } from '../services/api';
 import { VCPAnalysis } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
-import VCPScoreCard from '../components/VCPScoreCard';
+import StockRow from '../components/StockRow';
 
 interface ScanFilter {
   minVolume: number;
@@ -19,8 +18,6 @@ export default function Dashboard() {
   const [scannedAt, setScannedAt] = useState('');
   const [totalScanned, setTotalScanned] = useState(0);
   const [filter, setFilter] = useState<ScanFilter>({ minVolume: 1000, minPrice: 10 });
-  const navigate = useNavigate();
-
   const handleScan = async () => {
     setLoading(true);
     setError('');
@@ -111,16 +108,10 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Stock grid */}
-      <div style={S.grid}>
+      {/* Stock list with charts */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {stocks.map((vcp) => (
-          <div
-            key={vcp.symbol}
-            style={S.cardWrapper}
-            onClick={() => navigate(`/stock/${encodeURIComponent(vcp.symbol)}`)}
-          >
-            <VCPScoreCard vcp={vcp} />
-          </div>
+          <StockRow key={vcp.symbol} vcp={vcp} />
         ))}
       </div>
 
@@ -251,15 +242,6 @@ const S: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: 20,
     flexWrap: 'wrap',
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-    gap: 16,
-  },
-  cardWrapper: {
-    cursor: 'pointer',
-    transition: 'transform 0.15s',
   },
   empty: {
     textAlign: 'center',
