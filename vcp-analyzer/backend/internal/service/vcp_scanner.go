@@ -57,17 +57,19 @@ func (s *VCPScanner) Analyze(chart *model.StockChartData) *model.VCPAnalysis {
 	entry := roundTo2(pivot * 1.01)    // 1% above pivot
 	stopLoss := roundTo2(entry * 0.92) // 8% below entry
 
-	// Target: based on the prior advance magnitude before the VCP formed.
-	// 1. Find the index of the first contraction's high in candles
-	// 2. Scan backwards to find the lowest low (the rally start)
-	// 3. prior advance % = (first contraction high - rally low) / rally low
-	// 4. Target = entry × (1 + prior advance %)
+	// Target: based on 50% of the prior advance before the VCP formed.
+	// Subsequent moves after a VCP breakout typically achieve about half
+	// of the prior rally's magnitude. Clamped between 15% and 40%.
 	firstC := contractions[0]
 	priorAdvancePct := calcPriorAdvance(lows, candles, firstC)
-	if priorAdvancePct < 0.20 {
-		priorAdvancePct = 0.20 // floor: at least 20%
+	expectedMove := priorAdvancePct * 0.5 // use half of prior advance
+	if expectedMove < 0.15 {
+		expectedMove = 0.15 // floor 15%
 	}
-	target := roundTo2(entry * (1 + priorAdvancePct))
+	if expectedMove > 0.40 {
+		expectedMove = 0.40 // cap 40%
+	}
+	target := roundTo2(entry * (1 + expectedMove))
 
 	// ── Step 5: Score ─────────────────────────────────────────────────────
 	score := calcScore(contractions, passesTrend, volumeDryUp)
