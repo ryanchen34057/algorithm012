@@ -121,14 +121,22 @@ func (yf *YahooFinance) FetchHistory(symbol string) (*model.StockChartData, erro
 		closes[i] = c.Close
 	}
 
+	// Use regularMarketPrice from Yahoo meta for real-time price;
+	// fall back to last candle close if unavailable.
+	latestPrice := result.Meta.RegularMarketPrice
+	if latestPrice == 0 && len(candles) > 0 {
+		latestPrice = candles[len(candles)-1].Close
+	}
+
 	return &model.StockChartData{
-		Symbol:  result.Meta.Symbol,
-		Name:    name,
-		Candles: candles,
-		MA20:    calcMA(closes, 20),
-		MA50:    calcMA(closes, 50),
-		MA150:   calcMA(closes, 150),
-		MA200:   calcMA(closes, 200),
+		Symbol:      result.Meta.Symbol,
+		Name:        name,
+		LatestPrice: roundTo2(latestPrice),
+		Candles:     candles,
+		MA20:        calcMA(closes, 20),
+		MA50:        calcMA(closes, 50),
+		MA150:       calcMA(closes, 150),
+		MA200:       calcMA(closes, 200),
 	}, nil
 }
 

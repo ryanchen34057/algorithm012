@@ -6,9 +6,22 @@ import ThemeToggle from '../components/ThemeToggle';
 import StockRow from '../components/StockRow';
 
 interface ScanFilter {
-  minVolume: number;
   minPrice: number;
+  maxPrice: number;
+  minVolume: number;
+  minTodayVolume: number;
+  minGapPct: number;
+  maxGapPct: number;
 }
+
+const DEFAULTS: ScanFilter = {
+  minPrice: 10,
+  maxPrice: 500,
+  minVolume: 500,
+  minTodayVolume: 300,
+  minGapPct: 3,
+  maxGapPct: 40,
+};
 
 export default function Dashboard() {
   const c = useColors();
@@ -17,7 +30,7 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [scannedAt, setScannedAt] = useState('');
   const [totalScanned, setTotalScanned] = useState(0);
-  const [filter, setFilter] = useState<ScanFilter>({ minVolume: 500, minPrice: 10 });
+  const [filter, setFilter] = useState<ScanFilter>({ ...DEFAULTS });
 
   const handleScan = async () => {
     setLoading(true);
@@ -26,6 +39,10 @@ export default function Dashboard() {
       const result = await scanGap({
         minVolume: filter.minVolume,
         minPrice: filter.minPrice,
+        maxPrice: filter.maxPrice,
+        minTodayVolume: filter.minTodayVolume,
+        minGapPct: filter.minGapPct,
+        maxGapPct: filter.maxGapPct,
       });
       setStocks(result.stocks ?? []);
       setScannedAt(result.scannedAt);
@@ -37,6 +54,8 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  const handleReset = () => setFilter({ ...DEFAULTS });
 
   return (
     <div style={{ ...S.page, background: c.bg }}>
@@ -53,32 +72,81 @@ export default function Dashboard() {
 
       {/* Filter bar */}
       <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
-        <FilterInput
-          label="最低日均量（張）"
-          value={filter.minVolume}
-          onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))}
-          hint="建議 300–1000"
-        />
-        <FilterInput
-          label="最低股價（元）"
-          value={filter.minPrice}
-          onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))}
-          hint="建議 10–50"
-        />
-        <button
-          onClick={handleScan}
-          disabled={loading}
-          style={{ ...S.scanBtn, background: c.blue, opacity: loading ? 0.7 : 1 }}
-        >
-          {loading ? (
-            <>
-              <span style={S.spinner} />
-              掃描中...
-            </>
-          ) : (
-            '掃描全市場'
-          )}
-        </button>
+        {/* Group 1: Price & Volume */}
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>價格 & 成交量</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput
+              label="最低股價（元）"
+              value={filter.minPrice}
+              onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))}
+              hint="建議 10–50"
+            />
+            <FilterInput
+              label="最高股價（元）"
+              value={filter.maxPrice}
+              onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))}
+              hint="建議 100–1000"
+            />
+            <FilterInput
+              label="最低日均量（張）"
+              value={filter.minVolume}
+              onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))}
+              hint="ADV20, 建議 300–1000"
+            />
+            <FilterInput
+              label="最低當日量（張）"
+              value={filter.minTodayVolume}
+              onChange={(v) => setFilter((f) => ({ ...f, minTodayVolume: v }))}
+              hint="建議 100–500"
+            />
+          </div>
+        </div>
+
+        {/* Group 2: Gap Size */}
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>跳空幅度</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput
+              label="最低跳空（%）"
+              value={filter.minGapPct}
+              onChange={(v) => setFilter((f) => ({ ...f, minGapPct: v }))}
+              hint="建議 2–5"
+              step={0.5}
+            />
+            <FilterInput
+              label="最高跳空（%）"
+              value={filter.maxGapPct}
+              onChange={(v) => setFilter((f) => ({ ...f, maxGapPct: v }))}
+              hint="建議 20–50"
+              step={1}
+            />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginTop: 4 }}>
+          <button
+            onClick={handleScan}
+            disabled={loading}
+            style={{ ...S.scanBtn, background: c.blue, opacity: loading ? 0.7 : 1 }}
+          >
+            {loading ? (
+              <>
+                <span style={S.spinner} />
+                掃描中...
+              </>
+            ) : (
+              '掃描全市場'
+            )}
+          </button>
+          <button
+            onClick={handleReset}
+            style={{ ...S.resetBtn, borderColor: c.border, color: c.textSecondary }}
+          >
+            重設預設
+          </button>
+        </div>
       </div>
 
       {/* Legend */}
@@ -88,10 +156,10 @@ export default function Dashboard() {
         <LegendItem color={c.yellow} label="分數越高品質越好" />
       </div>
 
-      {/* Scan criteria summary */}
+      {/* Scan criteria summary (dynamic) */}
       <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
-        <strong style={{ color: c.text }}>篩選條件（台股版）：</strong><br />
-        股價 TWD 10–500 · ADV20 {'>'} 500 張 · 當日成交量 {'>'} 300 張 · 跳空幅度 3%–40%<br />
+        <strong style={{ color: c.text }}>目前篩選條件：</strong><br />
+        股價 TWD {filter.minPrice}–{filter.maxPrice} · ADV20 {'>'} {filter.minVolume} 張 · 當日成交量 {'>'} {filter.minTodayVolume} 張 · 跳空幅度 {filter.minGapPct}%–{filter.maxGapPct}%<br />
         Gap Up：昨日陰線 + 今開 {'>'} 昨高 + 今開 {'>'} MA20 & MA200<br />
         Gap Down：昨日陽線 + 今開 {'<'} 昨低 + 今開 {'<'} MA20 & MA200
       </div>
@@ -127,7 +195,7 @@ export default function Dashboard() {
       {stocks.length === 0 && !loading && scannedAt && (
         <div style={{ ...S.empty, color: c.textDim }}>
           目前沒有符合震撼型跳空條件的股票。<br />
-          可以調低最低日均量或股價條件後再試。
+          可以調整篩選條件後再試。
         </div>
       )}
 
@@ -148,11 +216,13 @@ function FilterInput({
   value,
   onChange,
   hint,
+  step = 1,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   hint?: string;
+  step?: number;
 }) {
   const c = useColors();
   return (
@@ -161,6 +231,7 @@ function FilterInput({
       <input
         type="number"
         value={value}
+        step={step}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{
           background: c.bgInput,
@@ -218,12 +289,28 @@ const S: Record<string, React.CSSProperties> = {
   },
   filterBar: {
     display: 'flex',
-    alignItems: 'flex-end',
-    gap: 20,
+    alignItems: 'flex-start',
+    gap: 24,
     padding: '16px 20px',
     borderRadius: 8,
     flexWrap: 'wrap',
     border: '1px solid transparent',
+  },
+  filterGroup: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 8,
+  },
+  filterGroupLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+  },
+  filterGroupInputs: {
+    display: 'flex',
+    gap: 16,
+    flexWrap: 'wrap' as const,
   },
   scanBtn: {
     display: 'flex',
@@ -236,7 +323,14 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 15,
     fontWeight: 700,
     cursor: 'pointer',
-    marginTop: 2,
+  },
+  resetBtn: {
+    background: 'transparent',
+    border: '1px solid',
+    borderRadius: 8,
+    padding: '9px 16px',
+    fontSize: 13,
+    cursor: 'pointer',
   },
   spinner: {
     display: 'inline-block',

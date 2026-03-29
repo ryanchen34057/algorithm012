@@ -10,6 +10,7 @@ export interface OHLCV {
 export interface StockChartData {
   symbol: string;
   name: string;
+  latestPrice: number;
   candles: OHLCV[];
   ma20: number[];
   ma50: number[];

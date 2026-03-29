@@ -37,12 +37,20 @@ func NewGapHandler(ds *service.YahooFinance, scanner *service.GapScanner) *GapHa
 //  4. Return ranked results
 func (h *GapHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	minVol := parseInt64(q.Get("minVolume"), 500)     // 張/day
-	minPrice := parseFloat(q.Get("minPrice"), 10.0)    // TWD
+	defaults := service.DefaultGapScanParams()
+
+	params := service.GapScanParams{
+		MinPrice:        parseFloat(q.Get("minPrice"), defaults.MinPrice),
+		MaxPrice:        parseFloat(q.Get("maxPrice"), defaults.MaxPrice),
+		MinADV20Lots:    parseFloat(q.Get("minVolume"), defaults.MinADV20Lots),
+		MinTodayVolLots: parseFloat(q.Get("minTodayVolume"), defaults.MinTodayVolLots),
+		MinGapPct:       parseFloat(q.Get("minGapPct"), defaults.MinGapPct),
+		MaxGapPct:       parseFloat(q.Get("maxGapPct"), defaults.MaxGapPct),
+	}
 	concurrency := parseInt(q.Get("concurrency"), 10)
 
-	log.Printf("[scan] fetching stock list (minVol=%d張 minPrice=%.0f)...", minVol, minPrice)
-	stocks := service.FetchAllStocks(minVol, minPrice)
+	log.Printf("[scan] fetching stock list (minVol=%.0f張 minPrice=%.0f)...", params.MinADV20Lots, params.MinPrice)
+	stocks := service.FetchAllStocks(int64(params.MinADV20Lots), params.MinPrice)
 	log.Printf("[scan] %d stocks to analyse", len(stocks))
 
 	type result struct {
@@ -66,7 +74,7 @@ func (h *GapHandler) Scan(w http.ResponseWriter, r *http.Request) {
 				results <- result{}
 				return
 			}
-			gap := h.scanner.Analyze(chart)
+			gap := h.scanner.Analyze(chart, params)
 			if gap != nil && chineseName != "" {
 				gap.Name = chineseName
 			}
@@ -125,7 +133,7 @@ func (h *GapHandler) CalcPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gap := h.scanner.Analyze(chart)
+	gap := h.scanner.Analyze(chart, service.DefaultGapScanParams())
 	if gap == nil {
 		http.Error(w, "no gap pattern detected", http.StatusNotFound)
 		return

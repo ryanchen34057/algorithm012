@@ -55,7 +55,7 @@ func (h *StockHandler) GetGap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gap := h.scanner.Analyze(chart)
+	gap := h.scanner.Analyze(chart, service.DefaultGapScanParams())
 	if gap == nil {
 		http.Error(w, "no gap pattern detected", http.StatusNotFound)
 		return

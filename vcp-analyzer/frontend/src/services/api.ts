@@ -6,16 +6,20 @@ const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8090';
 const api = axios.create({ baseURL: BASE });
 
 export interface ScanParams {
-  minVolume?: number;   // 最低日均量（張），預設 500
-  minPrice?: number;    // 最低股價（元），預設 10
-  concurrency?: number; // 並行請求數，預設 10
+  minVolume?: number;       // ADV20 最低日均量（張），預設 500
+  minPrice?: number;        // 最低股價（元），預設 10
+  maxPrice?: number;        // 最高股價（元），預設 500
+  minTodayVolume?: number;  // 最低當日成交量（張），預設 300
+  minGapPct?: number;       // 最低跳空幅度（%），預設 3
+  maxGapPct?: number;       // 最高跳空幅度（%），預設 40
+  concurrency?: number;     // 並行請求數，預設 10
 }
 
 export const scanGap = (params: ScanParams = {}): Promise<ScanResult> => {
   const p = new URLSearchParams();
-  if (params.minVolume !== undefined) p.set('minVolume', String(params.minVolume));
-  if (params.minPrice !== undefined) p.set('minPrice', String(params.minPrice));
-  if (params.concurrency !== undefined) p.set('concurrency', String(params.concurrency));
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined) p.set(key, String(val));
+  }
   return api.get<ScanResult>(`/api/gap/scan?${p.toString()}`).then(r => r.data);
 };
 

@@ -7,22 +7,34 @@ import (
 	"vcp-analyzer/internal/model"
 )
 
-// ── Taiwan-adapted parameters ────────────────────────────────────────────────
-// Original US values → Taiwan equivalents:
-//   Price:   $1–$100      → TWD 10–500
-//   ADV20:   >2M shares   → >500 張 (500K shares)
-//   Opening: >300K shares  → >300 張 (approx; daily vol proxy, no intraday data)
-//   Gap%:    3%–40%        → same (universal)
-//   MA:      20, 200 SMA   → same (universal)
+// GapScanParams holds all configurable filter thresholds.
+// Taiwan-adapted defaults (original US values → Taiwan equivalents):
+//
+//	Price:   $1–$100      → TWD 10–500
+//	ADV20:   >2M shares   → >500 張 (500K shares)
+//	Opening: >300K shares  → >300 張 (daily vol proxy, no intraday data)
+//	Gap%:    3%–40%        → same (universal)
+//	MA:      20, 200 SMA   → same (universal)
+type GapScanParams struct {
+	MinPrice        float64 // 最低股價 (TWD), default 10
+	MaxPrice        float64 // 最高股價 (TWD), default 500
+	MinADV20Lots    float64 // 最低 20 日均量 (張), default 500
+	MinTodayVolLots float64 // 最低當日成交量 (張), default 300
+	MinGapPct       float64 // 最低跳空幅度 (%), default 3
+	MaxGapPct       float64 // 最高跳空幅度 (%), default 40
+}
 
-const (
-	minPriceTW       = 10.0  // TWD
-	maxPriceTW       = 500.0 // TWD
-	minADV20Lots     = 500   // 張 (lots of 1000 shares)
-	minTodayVolLots  = 300   // 張 — proxy for opening momentum
-	minGapPct        = 3.0   // %
-	maxGapPct        = 40.0  // %
-)
+// DefaultGapScanParams returns recommended defaults for Taiwan stocks.
+func DefaultGapScanParams() GapScanParams {
+	return GapScanParams{
+		MinPrice:        10,
+		MaxPrice:        500,
+		MinADV20Lots:    500,
+		MinTodayVolLots: 300,
+		MinGapPct:       3,
+		MaxGapPct:       40,
+	}
+}
 
 // GapScanner detects shock-gap patterns in stock price data.
 type GapScanner struct{}
@@ -31,7 +43,7 @@ func NewGapScanner() *GapScanner { return &GapScanner{} }
 
 // Analyze runs the full gap detection pipeline on the provided chart data.
 // Returns nil if the stock does not qualify.
-func (s *GapScanner) Analyze(chart *model.StockChartData) *model.GapAnalysis {
+func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) *model.GapAnalysis {
 	candles := chart.Candles
 	if len(candles) < 201 { // need at least 200+1 bars for MA200 + today
 		return nil
@@ -42,21 +54,25 @@ func (s *GapScanner) Analyze(chart *model.StockChartData) *model.GapAnalysis {
 	yesterday := candles[n-2]
 
 	// ── Basic filters ────────────────────────────────────────────────────
-	currentPrice := today.Close
-	if currentPrice < minPriceTW || currentPrice > maxPriceTW {
+	// Use real-time price from Yahoo meta if available
+	currentPrice := chart.LatestPrice
+	if currentPrice == 0 {
+		currentPrice = today.Close
+	}
+	if currentPrice < params.MinPrice || currentPrice > params.MaxPrice {
 		return nil
 	}
 
 	// ADV20: average daily volume over the last 20 days, in 張
 	adv20Shares := avgVolumeN(candles, 20)
 	adv20Lots := adv20Shares / 1000.0
-	if adv20Lots < float64(minADV20Lots) {
+	if adv20Lots < params.MinADV20Lots {
 		return nil
 	}
 
 	// Today's volume proxy for opening momentum (張)
 	todayVolLots := float64(today.Volume) / 1000.0
-	if todayVolLots < float64(minTodayVolLots) {
+	if todayVolLots < params.MinTodayVolLots {
 		return nil
 	}
 
@@ -79,13 +95,13 @@ func (s *GapScanner) Analyze(chart *model.StockChartData) *model.GapAnalysis {
 	// Condition A: Shock Gap Up (Long)
 	gapUpOK := yesterday.Close < yesterday.Open && // 昨日陰線
 		today.Open > yesterday.High && // 跳空過昨高
-		gapPct > minGapPct && gapPct < maxGapPct && // 3%–40%
+		gapPct > params.MinGapPct && gapPct < params.MaxGapPct &&
 		today.Open > ma20Today && today.Open > ma200Today // 開盤 > MA20 & MA200
 
 	// Condition B: Shock Gap Down (Short)
 	gapDownOK := yesterday.Close > yesterday.Open && // 昨日陽線
 		today.Open < yesterday.Low && // 跳空破昨低
-		gapPct < -minGapPct && gapPct > -maxGapPct && // -3%– -40%
+		gapPct < -params.MinGapPct && gapPct > -params.MaxGapPct &&
 		today.Open < ma20Today && today.Open < ma200Today // 開盤 < MA20 & MA200
 
 	if gapUpOK {
