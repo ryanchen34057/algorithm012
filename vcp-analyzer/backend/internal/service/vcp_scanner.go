@@ -158,16 +158,23 @@ func (s *GapScanner) Analyze(chart *model.StockChartData, params GapScanParams) 
 	}
 
 	// ── Entry / Stop / Target ────────────────────────────────────────────
-	entry := today.Open
+	// 進場點用最新收盤價（掃描在收盤後執行，隔日開盤最接近昨收）
+	entry := today.Close
 	var stopLoss, target float64
 
 	if direction == model.GapUp {
 		stopLoss = yesterday.Close
 		risk := entry - stopLoss
+		if risk <= 0 {
+			return nil // 收盤跌回缺口內，訊號失效
+		}
 		target = roundTo2(entry + 3*risk)
 	} else {
 		stopLoss = yesterday.Close
 		risk := stopLoss - entry
+		if risk <= 0 {
+			return nil // 收盤漲回缺口內，訊號失效
+		}
 		target = roundTo2(entry - 3*risk)
 	}
 
