@@ -11,12 +11,20 @@ import {
 import { StockChartData, GapAnalysis } from '../types';
 import { useColors } from './ThemeContext';
 
+export interface PriceLine {
+  price: number;
+  color: string;
+  title: string;
+  lineStyle?: number; // 0=solid, 1=dotted, 2=dashed
+}
+
 interface Props {
   chart: StockChartData;
   gap?: GapAnalysis;
+  priceLines?: PriceLine[];
 }
 
-export default function StockChart({ chart, gap }: Props) {
+export default function StockChart({ chart, gap, priceLines: customLines }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const disposedRef = useRef(false);
@@ -156,6 +164,20 @@ export default function StockChart({ chart, gap }: Props) {
       });
     }
 
+    // ── Custom price lines (for breakout scanner etc.) ────────────────
+    if (customLines) {
+      for (const pl of customLines) {
+        candleSeries.createPriceLine({
+          price: pl.price,
+          color: pl.color,
+          lineWidth: 1,
+          lineStyle: pl.lineStyle ?? 2,
+          axisLabelVisible: true,
+          title: pl.title,
+        });
+      }
+    }
+
     lc.timeScale().fitContent();
 
     // ── Resize observer ─────────────────────────────────────────────────
@@ -180,7 +202,7 @@ export default function StockChart({ chart, gap }: Props) {
       }
       chartRef.current = null;
     };
-  }, [chart, gap, c]);
+  }, [chart, gap, customLines, c]);
 
   return (
     <div

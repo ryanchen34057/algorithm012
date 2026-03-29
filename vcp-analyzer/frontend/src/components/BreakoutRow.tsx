@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { getChart } from '../services/api';
 import { StockChartData, BreakoutAnalysis } from '../types';
 import { useColors } from './ThemeContext';
-import StockChart from './StockChart';
+import StockChart, { PriceLine } from './StockChart';
 
 interface Props {
   stock: BreakoutAnalysis;
@@ -24,6 +24,17 @@ export default function BreakoutRow({ stock }: Props) {
 
   const code = stock.symbol.replace(/\.(TW|TWO)$/, '');
   const patternColor = stock.pattern === 'w_bottom' ? '#a78bfa' : stock.pattern === 'v_bottom' ? '#22d3ee' : c.textMuted;
+
+  // Build price lines for chart
+  const lines: PriceLine[] = [
+    { price: stock.entryPrice, color: c.blue, title: `進場 ${stock.entryPrice}` },
+    { price: stock.stopLoss, color: c.red, title: `停損 ${stock.stopLoss}` },
+    { price: stock.target, color: c.green, title: `目標 ${stock.target}` },
+    { price: stock.prevHigh, color: '#f59e0b', title: `前高 ${stock.prevHigh}`, lineStyle: 1 },
+  ];
+  if (stock.pattern === 'w_bottom' && stock.neckline > 0) {
+    lines.push({ price: stock.neckline, color: '#a78bfa', title: `頸線 ${stock.neckline}`, lineStyle: 1 });
+  }
 
   return (
     <div style={{ background: c.bgCard, borderRadius: 10, border: `1px solid ${c.border}`, overflow: 'hidden' }}>
@@ -83,7 +94,7 @@ export default function BreakoutRow({ stock }: Props) {
         {loading ? (
           <div style={{ color: c.textMuted, padding: '40px 0', textAlign: 'center', fontSize: 14 }}>載入線圖中...</div>
         ) : chart ? (
-          <StockChart chart={chart} />
+          <StockChart chart={chart} priceLines={lines} />
         ) : (
           <div style={{ color: c.textMuted, padding: '40px 0', textAlign: 'center', fontSize: 14 }}>無法載入線圖</div>
         )}
