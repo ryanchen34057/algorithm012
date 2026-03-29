@@ -164,6 +164,26 @@ func FetchAllStocks(minVolumeLots int64, minPrice float64) []model.StockInfo {
 		return list
 	}
 
+	// If one source failed, supplement with fallback for that market
+	if twse == nil {
+		log.Printf("[TWSE] using fallback TWSE stocks")
+		fb := fallbackStockList()
+		for _, s := range fb {
+			if strings.HasSuffix(s.Symbol, ".TW") {
+				twse = append(twse, s)
+			}
+		}
+	}
+	if tpex == nil {
+		log.Printf("[TPEx] using fallback TPEx stocks")
+		fb := fallbackStockList()
+		for _, s := range fb {
+			if strings.HasSuffix(s.Symbol, ".TWO") {
+				tpex = append(tpex, s)
+			}
+		}
+	}
+
 	all := append(twse, tpex...)
 	SetNames(all)
 	log.Printf("[stock list] TWSE=%d TPEx=%d total=%d (minVol=%d張 minPrice=%.0f)",
