@@ -558,7 +558,7 @@ function SuperPerfFilterBar({ filter, setFilter, loading, onScan, onReset }: {
         <div style={S.filterGroup}>
           <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>排序 & 篩選</span>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <ButtonGroup label="排序漲幅" value={filter.gainPeriod} options={[['1m', '近1月'], ['3m', '近3月'], ['6m', '近6月'], ['ytd', '今年至今']]} onChange={(v) => setFilter((f) => ({ ...f, gainPeriod: v as GainPeriod }))} />
+            <ButtonGroup label="排序漲幅" value={filter.gainPeriod} options={[['1d', '最近收盤'], ['1w', '近1週'], ['1m', '近1月'], ['3m', '近3月'], ['6m', '近6月'], ['ytd', '今年至今']]} onChange={(v) => setFilter((f) => ({ ...f, gainPeriod: v as GainPeriod }))} />
             <ButtonGroup label="市場" value={filter.marketFilter} options={[['all', '全部'], ['listed', '上市'], ['otc', '上櫃']]} onChange={(v) => setFilter((f) => ({ ...f, marketFilter: v as MarketFilter }))} />
             <FilterInput label="最低漲幅（%）" value={filter.minGainPct} onChange={(v) => setFilter((f) => ({ ...f, minGainPct: v }))} hint="排序週期的最低漲幅" step={1} />
           </div>
@@ -574,7 +574,7 @@ function SuperPerfFilterBar({ filter, setFilter, loading, onScan, onReset }: {
 
       <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
         <strong style={{ color: c.text }}>超級績效策略說明：</strong><br />
-        依{filter.gainPeriod === '1m' ? '近1月' : filter.gainPeriod === '3m' ? '近3月' : filter.gainPeriod === '6m' ? '近6月' : '今年至今'}漲幅排序所有台股，再以 VCP（波動收縮）五維度評分：<br />
+        依{filter.gainPeriod === '1d' ? '最近收盤日' : filter.gainPeriod === '1w' ? '近1週' : filter.gainPeriod === '1m' ? '近1月' : filter.gainPeriod === '3m' ? '近3月' : filter.gainPeriod === '6m' ? '近6月' : '今年至今'}漲幅排序所有台股，再以 VCP（波動收縮）五維度評分：<br />
         趨勢(20) + 波動收縮(30) + 量縮(20) + 接近樞紐(15) + 相對強度(15) = 100 分<br />
         <span style={{ color: c.textMuted }}>每檔股票標示產業分類與概念股標籤，上方顯示產業熱度排行</span>
       </div>

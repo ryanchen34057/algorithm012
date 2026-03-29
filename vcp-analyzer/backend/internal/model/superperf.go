@@ -10,6 +10,8 @@ type SuperPerfAnalysis struct {
 	CurrentPrice float64 `json:"currentPrice"`
 
 	// 漲幅
+	Gain1D  float64 `json:"gain1d"`  // 最近收盤日漲幅 (%)
+	Gain1W  float64 `json:"gain1w"`  // 近1週漲幅 (%)
 	Gain1M  float64 `json:"gain1m"`  // 近1月漲幅 (%)
 	Gain3M  float64 `json:"gain3m"`  // 近3月漲幅 (%)
 	Gain6M  float64 `json:"gain6m"`  // 近6月漲幅 (%)

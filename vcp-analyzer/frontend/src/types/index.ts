@@ -146,6 +146,8 @@ export interface SuperPerfAnalysis {
   industry: string;
   conceptTag: string;
   currentPrice: number;
+  gain1d: number;
+  gain1w: number;
   gain1m: number;
   gain3m: number;
   gain6m: number;

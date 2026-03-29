@@ -68,7 +68,7 @@ export const scanPeakAttack = (params: PeakAttackScanParams = {}): Promise<PeakA
   return api.get<PeakAttackScanResult>(`/api/peakattack/scan?${p.toString()}`).then(r => r.data);
 };
 
-export type GainPeriod = '1m' | '3m' | '6m' | 'ytd';
+export type GainPeriod = '1d' | '1w' | '1m' | '3m' | '6m' | 'ytd';
 export type MarketFilter = 'all' | 'listed' | 'otc';
 
 export interface SuperPerfScanParams {

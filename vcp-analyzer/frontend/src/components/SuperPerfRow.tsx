@@ -63,6 +63,8 @@ export default function SuperPerfRow({ stock }: Props) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {/* Gains */}
+          <GainBadge label="1D" value={stock.gain1d} c={c} />
+          <GainBadge label="1W" value={stock.gain1w} c={c} />
           <GainBadge label="1M" value={stock.gain1m} c={c} />
           <GainBadge label="3M" value={stock.gain3m} c={c} />
           <GainBadge label="6M" value={stock.gain6m} c={c} />
@@ -128,9 +130,11 @@ export default function SuperPerfRow({ stock }: Props) {
 
             {/* Gains detail */}
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-              <Chip label="近1月漲幅" value={`${stock.gain1m >= 0 ? '+' : ''}${stock.gain1m}%`} color={stock.gain1m >= 0 ? c.up : c.down} />
-              <Chip label="近3月漲幅" value={`${stock.gain3m >= 0 ? '+' : ''}${stock.gain3m}%`} color={stock.gain3m >= 0 ? c.up : c.down} />
-              <Chip label="近6月漲幅" value={`${stock.gain6m >= 0 ? '+' : ''}${stock.gain6m}%`} color={stock.gain6m >= 0 ? c.up : c.down} />
+              <Chip label="最近收盤" value={`${stock.gain1d >= 0 ? '+' : ''}${stock.gain1d}%`} color={stock.gain1d >= 0 ? c.up : c.down} />
+              <Chip label="近1週" value={`${stock.gain1w >= 0 ? '+' : ''}${stock.gain1w}%`} color={stock.gain1w >= 0 ? c.up : c.down} />
+              <Chip label="近1月" value={`${stock.gain1m >= 0 ? '+' : ''}${stock.gain1m}%`} color={stock.gain1m >= 0 ? c.up : c.down} />
+              <Chip label="近3月" value={`${stock.gain3m >= 0 ? '+' : ''}${stock.gain3m}%`} color={stock.gain3m >= 0 ? c.up : c.down} />
+              <Chip label="近6月" value={`${stock.gain6m >= 0 ? '+' : ''}${stock.gain6m}%`} color={stock.gain6m >= 0 ? c.up : c.down} />
               <Chip label="今年至今" value={`${stock.gainYtd >= 0 ? '+' : ''}${stock.gainYtd}%`} color={stock.gainYtd >= 0 ? c.up : c.down} />
             </div>
           </div>
