@@ -24,6 +24,7 @@ export default function StockRow({ gap }: Props) {
   }, [gap.symbol]);
 
   const code = gap.symbol.replace(/\.(TW|TWO)$/, '');
+  const market = gap.symbol.endsWith('.TWO') ? '櫃' : '市';
   const isLong = gap.direction === 'long';
   const dirColor = isLong ? c.up : c.down;
   const dirLabel = isLong ? 'Gap Up' : 'Gap Down';
@@ -40,6 +41,11 @@ export default function StockRow({ gap }: Props) {
         onClick={() => setExpanded((v) => !v)}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '1px 4px', borderRadius: 3,
+            background: market === '櫃' ? '#8b5cf622' : '#3b82f622',
+            color: market === '櫃' ? '#8b5cf6' : '#3b82f6',
+          }}>{market === '櫃' ? '上櫃' : '上市'}</span>
           <span style={{ fontWeight: 800, fontSize: 20, color: c.text }}>{code}</span>
           <span style={{ color: c.textSecondary, fontSize: 15 }}>{gap.name}</span>
           <span style={{ color: c.text, fontSize: 17, fontWeight: 700 }}>

@@ -20,6 +20,7 @@ export default function PeakAttackRow({ stock }: Props) {
   }, [stock.symbol]);
 
   const code = stock.symbol.replace(/\.(TW|TWO)$/, '');
+  const market = stock.symbol.endsWith('.TWO') ? '櫃' : '市';
   const isBreaking = stock.distPct <= 0;
 
   // Price lines
@@ -39,6 +40,11 @@ export default function PeakAttackRow({ stock }: Props) {
         onClick={() => setExpanded((v) => !v)}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '1px 4px', borderRadius: 3,
+            background: market === '櫃' ? '#8b5cf622' : '#3b82f622',
+            color: market === '櫃' ? '#8b5cf6' : '#3b82f6',
+          }}>{market === '櫃' ? '上櫃' : '上市'}</span>
           <span style={{ fontWeight: 800, fontSize: 20, color: c.text }}>{code}</span>
           <span style={{ color: c.textSecondary, fontSize: 15 }}>{stock.name}</span>
           <span style={{ color: c.text, fontSize: 17, fontWeight: 700 }}>{stock.currentPrice}</span>
