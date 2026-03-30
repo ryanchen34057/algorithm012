@@ -4,6 +4,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"vcp-analyzer/internal/model"
 )
@@ -24,7 +25,7 @@ func DefaultMAPullbackScanParams() MAPullbackScanParams {
 		MinADV20Lots: 300,
 		PullbackPct:  3,
 		SlopeDays:    5,
-		MinScore:     50,
+		MinScore:     40,
 	}
 }
 
@@ -35,7 +36,7 @@ func NewMAPullbackScanner() *MAPullbackScanner { return &MAPullbackScanner{} }
 func (s *MAPullbackScanner) Analyze(chart *model.StockChartData, params MAPullbackScanParams) *model.MAPullbackAnalysis {
 	candles := chart.Candles
 	n := len(candles)
-	if n < 250 { // need enough data for monthly MA200
+	if n < 200 { // need at least ~200 daily candles for daily MA200
 		return nil
 	}
 
@@ -68,11 +69,8 @@ func (s *MAPullbackScanner) Analyze(chart *model.StockChartData, params MAPullba
 
 	// ── Weekly candles (from daily) ──
 	weeklyCandles := toDailyToWeekly(candles)
-	if len(weeklyCandles) < 210 { // need enough for weekly MA200
-		// Try with what we have
-		if len(weeklyCandles) < 25 {
-			return nil
-		}
+	if len(weeklyCandles) < 20 { // need at least 20 for weekly MA20
+		return nil
 	}
 	weeklyCloses := extractCloses(weeklyCandles)
 	wn := len(weeklyCloses)
@@ -90,29 +88,44 @@ func (s *MAPullbackScanner) Analyze(chart *model.StockChartData, params MAPullba
 
 	// ── Monthly candles (from daily) ──
 	monthlyCandles := toDailyToMonthly(candles)
-	if len(monthlyCandles) < 25 {
-		return nil
-	}
 	monthlyCloses := extractCloses(monthlyCandles)
 	mn := len(monthlyCloses)
-	mMA20 := simpleMA(monthlyCloses, 20)
+	mMA20 := 0.0
 	mMA200 := 0.0
-	if mn >= 200 {
-		mMA200 = simpleMA(monthlyCloses, 200)
-	}
-	mMA20Slope := maSlope(monthlyCloses, 20, params.SlopeDays)
-	mClose := monthlyCloses[mn-1]
+	mMA20Slope := 0.0
+	mClose := 0.0
 	mDistMA20 := 0.0
-	if mMA20 > 0 {
-		mDistMA20 = (mClose - mMA20) / mMA20 * 100
+	hasMonthly := mn >= 12 // 至少 12 個月才看月線
+	if hasMonthly {
+		if mn >= 20 {
+			mMA20 = simpleMA(monthlyCloses, 20)
+		} else {
+			// 不足 20 個月就用全部平均當近似
+			mMA20 = simpleMA(monthlyCloses, mn)
+		}
+		if mn >= 200 {
+			mMA200 = simpleMA(monthlyCloses, 200)
+		}
+		if mn >= 20 {
+			mMA20Slope = maSlope(monthlyCloses, 20, min(params.SlopeDays, mn-20))
+		}
+		mClose = monthlyCloses[mn-1]
+		if mMA20 > 0 {
+			mDistMA20 = (mClose - mMA20) / mMA20 * 100
+		}
 	}
 
 	// ── Check conditions per timeframe ──
-	// 條件：MA20向上 + 價格在MA20之上 + MA20在MA200之上
+	// 日線：MA20向上 + 價格在MA20附近或之上 + MA20>MA200
 	dailyOK := dMA20Slope > 0 && price >= dMA20*0.97 && dMA20 > dMA200
+	// 週線：MA20向上 + 週收在MA20附近或之上
 	weeklyOK := wMA20 > 0 && wMA20Slope > 0 && wClose >= wMA20*0.97 && (wMA200 <= 0 || wMA20 > wMA200)
-	monthlyOK := mMA20 > 0 && mMA20Slope > 0 && mClose >= mMA20*0.97 && (mMA200 <= 0 || mMA20 > mMA200)
-	allOK := dailyOK && weeklyOK && monthlyOK
+	// 月線：有資料就判斷，沒資料就不列入硬篩（用評分扣分）
+	monthlyOK := false
+	if hasMonthly && mMA20 > 0 {
+		monthlyOK = mMA20Slope > 0 && mClose >= mMA20*0.97 && (mMA200 <= 0 || mMA20 > mMA200)
+	}
+	allOK := dailyOK && weeklyOK && (monthlyOK || !hasMonthly)
 
 	// ── Scoring ──
 	score := calcMAPullbackScore(
@@ -121,6 +134,7 @@ func (s *MAPullbackScanner) Analyze(chart *model.StockChartData, params MAPullba
 		dailyOK, weeklyOK, monthlyOK,
 		price, dMA20, dMA200,
 		params.PullbackPct,
+		hasMonthly,
 	)
 
 	if score < params.MinScore {
@@ -210,34 +224,45 @@ func calcMAPullbackScore(
 	dOK, wOK, mOK bool,
 	price, dMA20, dMA200 float64,
 	pullbackPct float64,
+	hasMonthly bool,
 ) float64 {
 	score := 0.0
 
 	// Timeframe alignment (0-30 pts)
 	if dOK {
-		score += 10
+		score += 12
 	}
 	if wOK {
-		score += 10
+		score += 12
 	}
 	if mOK {
-		score += 10
+		score += 6
+	} else if !hasMonthly {
+		// 沒月線資料不扣分，給一半
+		score += 3
 	}
 
 	// MA20 slopes — steeper uptrend = better (0-15 pts)
-	slopeScore := 0.0
-	for _, sl := range []float64{dSlope, wSlope, mSlope} {
+	// 日線和週線各 6 pts，月線 3 pts
+	for idx, sl := range []float64{dSlope, wSlope, mSlope} {
+		maxPt := 6.0
+		if idx == 2 {
+			maxPt = 3.0
+			if !hasMonthly {
+				score += 1.5 // 沒月線給一半
+				continue
+			}
+		}
 		if sl > 2 {
-			slopeScore += 5
+			score += maxPt
 		} else if sl > 1 {
-			slopeScore += 4
+			score += maxPt * 0.8
 		} else if sl > 0.3 {
-			slopeScore += 3
+			score += maxPt * 0.6
 		} else if sl > 0 {
-			slopeScore += 2
+			score += maxPt * 0.4
 		}
 	}
-	score += slopeScore
 
 	// Daily pullback proximity (0-25 pts): closer to MA20 = better opportunity
 	absDist := math.Abs(dDist)
@@ -271,18 +296,20 @@ func calcMAPullbackScore(
 
 	// Trend consistency: price > MA20 on all TFs (0-10 pts)
 	if dDist > 0 {
-		score += 3
-	}
-	if wDist > 0 {
-		score += 3
-	}
-	if mDist > 0 {
 		score += 4
 	}
+	if wDist > 0 {
+		score += 4
+	}
+	if hasMonthly && mDist > 0 {
+		score += 2
+	} else if !hasMonthly {
+		score += 1
+	}
 
-	// Bonus: "just touching" MA20 on daily but above on weekly/monthly (ideal pullback)
-	if dDist >= -1 && dDist <= 3 && wDist > 3 && mDist > 3 {
-		score += 10
+	// Bonus: "just touching" MA20 on daily but above on weekly (ideal pullback)
+	if dDist >= -1 && dDist <= pullbackPct && wDist > 3 {
+		score += 5
 	}
 
 	return math.Min(score, 100)
@@ -300,18 +327,16 @@ func toDailyToWeekly(candles []model.OHLCV) []simplifiedCandle {
 	}
 	var weekly []simplifiedCandle
 	var weekClose float64
+	prevYear, prevWeek := 0, 0
 
-	prevWeekday := -1
 	for _, c := range candles {
-		weekday := guessWeekday(c.Date)
-		// New week starts when weekday is smaller than previous (Mon < Fri)
-		if prevWeekday >= 0 && weekday <= prevWeekday && weekClose > 0 {
+		y, w := isoWeek(c.Date)
+		if prevYear != 0 && (y != prevYear || w != prevWeek) && weekClose > 0 {
 			weekly = append(weekly, simplifiedCandle{Close: weekClose})
 		}
 		weekClose = c.Close
-		prevWeekday = weekday
+		prevYear, prevWeek = y, w
 	}
-	// Last incomplete week
 	if weekClose > 0 {
 		weekly = append(weekly, simplifiedCandle{Close: weekClose})
 	}
@@ -351,21 +376,27 @@ func extractCloses(candles []simplifiedCandle) []float64 {
 	return closes
 }
 
-// guessWeekday returns 0=Mon..4=Fri based on date string position in sequence
-// Since we don't have time package, we use the fact that trading days are Mon-Fri
-// and count sequential days. This is approximate.
-func guessWeekday(date string) int {
-	if len(date) < 10 {
-		return 0
+// isoWeekday returns ISO weekday: 1=Mon..7=Sun
+func isoWeekday(date string) int {
+	t, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return 1
 	}
-	// Parse day from "2024-03-15" format
-	d := 0
-	for i := 8; i < 10 && i < len(date); i++ {
-		d = d*10 + int(date[i]-'0')
+	wd := int(t.Weekday()) // 0=Sun..6=Sat
+	if wd == 0 {
+		return 7
 	}
-	// Use day-of-month mod 7 as rough weekday proxy
-	// This isn't perfect but good enough for weekly grouping
-	return d % 7
+	return wd
+}
+
+// isoWeek returns (year, week) for weekly candle grouping
+func isoWeek(date string) (int, int) {
+	t, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return 0, 0
+	}
+	y, w := t.ISOWeek()
+	return y, w
 }
 
 // maSlope calculates the slope of MA over recent N periods (as %)
