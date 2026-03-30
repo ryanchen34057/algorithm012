@@ -502,6 +502,51 @@ func roundTo2(v float64) float64 {
 
 // ── Industry Classification ─────────────────────────────────────────────────
 
+// twseIndustryCodes maps TWSE numeric industry codes to Chinese names
+var twseIndustryCodes = map[string]string{
+	"01": "水泥", "02": "食品", "03": "塑膠", "04": "紡織纖維",
+	"05": "電機機械", "06": "電器電纜", "07": "化學工業", "08": "玻璃陶瓷",
+	"09": "造紙", "10": "鋼鐵", "11": "橡膠", "12": "汽車",
+	"13": "電子", "14": "建材營造", "15": "航運", "16": "觀光餐旅",
+	"17": "金融保險", "18": "貿易百貨", "19": "綜合", "20": "其他",
+	"21": "化學工業", "22": "生技醫療", "23": "油電燃氣",
+	"24": "半導體", "25": "電腦及週邊", "26": "光電",
+	"27": "通信網路", "28": "電子零組件", "29": "電子通路",
+	"30": "資訊服務", "31": "其他電子", "32": "文化創意",
+	"33": "農業科技", "34": "電子商務", "35": "綠能環保",
+	"36": "數位雲端", "37": "運動休閒", "38": "居家生活",
+	"39": "存託憑證", "40": "航太", "41": "觀光",
+	// 上櫃分類代碼
+	"M2800": "金融保險", "M2300": "電子",
+	"M2500": "建材營造", "M1700": "造紙",
+	"M2900": "觀光餐旅", "M9900": "其他",
+}
+
+// resolveIndustryCode converts a numeric code or short code to industry name
+func resolveIndustryCode(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	// Direct lookup
+	if name, ok := twseIndustryCodes[raw]; ok {
+		return name
+	}
+	// If it's already a Chinese name (not all digits), return as-is
+	for _, c := range raw {
+		if c < '0' || c > '9' {
+			return raw // Already a name
+		}
+	}
+	// Numeric but not in map — pad to 2 digits and try again
+	if len(raw) == 1 {
+		if name, ok := twseIndustryCodes["0"+raw]; ok {
+			return name
+		}
+	}
+	return raw // Return raw as fallback
+}
+
 // fetchAndSetIndustries fetches TWSE + TPEx industry classification data
 // and populates the global industry registry.
 func fetchAndSetIndustries(client *http.Client) {
@@ -516,7 +561,7 @@ func fetchAndSetIndustries(client *http.Client) {
 			count := 0
 			for _, r := range rows {
 				code := strings.TrimSpace(r.Code)
-				industry := strings.TrimSpace(r.Industry)
+				industry := resolveIndustryCode(r.Industry)
 				if code != "" && industry != "" {
 					SetIndustry(code+".TW", industry)
 					count++
@@ -539,7 +584,7 @@ func fetchAndSetIndustries(client *http.Client) {
 			count := 0
 			for _, r := range rows {
 				code := strings.TrimSpace(r.Code)
-				industry := strings.TrimSpace(r.Industry)
+				industry := resolveIndustryCode(r.Industry)
 				if code != "" && industry != "" {
 					SetIndustry(code+".TWO", industry)
 					count++
@@ -556,7 +601,7 @@ func fetchAndSetIndustries(client *http.Client) {
 				count := 0
 				for _, r := range rows2 {
 					code := strings.TrimSpace(r.Code)
-					industry := strings.TrimSpace(r.Industry)
+					industry := resolveIndustryCode(r.Industry)
 					if code != "" && industry != "" {
 						SetIndustry(code+".TWO", industry)
 						count++
