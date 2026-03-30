@@ -205,7 +205,7 @@ export default function Dashboard() {
         setSuperPerfIndustries(result.industries ?? []);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
-      } else {
+      } else if (tab === 'elitepick') {
         const result = await scanElitePick({
           minPrice: elitePickFilter.minPrice, maxPrice: elitePickFilter.maxPrice,
           minVolume: elitePickFilter.minVolume, volShrinkMax: elitePickFilter.volShrinkMax,
