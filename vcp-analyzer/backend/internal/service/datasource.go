@@ -186,6 +186,10 @@ func FetchAllStocks(minVolumeLots int64, minPrice float64) []model.StockInfo {
 
 	all := append(twse, tpex...)
 	SetNames(all)
+
+	// Fetch industry classification (blocks until done)
+	fetchAndSetIndustries(client)
+
 	log.Printf("[stock list] TWSE=%d TPEx=%d total=%d (minVol=%d張 minPrice=%.0f)",
 		len(twse), len(tpex), len(all), minVolumeLots, minPrice)
 	return all
@@ -494,4 +498,74 @@ func safeGetInt(s []int64, i int) int64 {
 func roundTo2(v float64) float64 {
 	f, _ := strconv.ParseFloat(fmt.Sprintf("%.2f", v), 64)
 	return f
+}
+
+// ── Industry Classification ─────────────────────────────────────────────────
+
+// fetchAndSetIndustries fetches TWSE + TPEx industry classification data
+// and populates the global industry registry.
+func fetchAndSetIndustries(client *http.Client) {
+	// TWSE: 上市公司產業分類
+	twseIndustryURL := "https://opendata.twse.com.tw/v1/opendata/t187ap03_L"
+	if body, err := getJSON(client, twseIndustryURL); err == nil {
+		var rows []struct {
+			Code     string `json:"公司代號"`
+			Industry string `json:"產業別"`
+		}
+		if json.Unmarshal(body, &rows) == nil {
+			count := 0
+			for _, r := range rows {
+				code := strings.TrimSpace(r.Code)
+				industry := strings.TrimSpace(r.Industry)
+				if code != "" && industry != "" {
+					SetIndustry(code+".TW", industry)
+					count++
+				}
+			}
+			log.Printf("[industry] TWSE: loaded %d industry classifications", count)
+		}
+	} else {
+		log.Printf("[industry] TWSE classification fetch failed: %v", err)
+	}
+
+	// TPEx: 上櫃公司產業分類
+	tpexIndustryURL := "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
+	if body, err := getJSON(client, tpexIndustryURL); err == nil {
+		var rows []struct {
+			Code     string `json:"SecuritiesCompanyCode"`
+			Industry string `json:"SecuritiesIndustryCode"`
+		}
+		if json.Unmarshal(body, &rows) == nil {
+			count := 0
+			for _, r := range rows {
+				code := strings.TrimSpace(r.Code)
+				industry := strings.TrimSpace(r.Industry)
+				if code != "" && industry != "" {
+					SetIndustry(code+".TWO", industry)
+					count++
+				}
+			}
+			log.Printf("[industry] TPEx: loaded %d industry classifications", count)
+		} else {
+			// Try alternative field names
+			var rows2 []struct {
+				Code     string `json:"公司代號"`
+				Industry string `json:"產業別"`
+			}
+			if json.Unmarshal(body, &rows2) == nil {
+				count := 0
+				for _, r := range rows2 {
+					code := strings.TrimSpace(r.Code)
+					industry := strings.TrimSpace(r.Industry)
+					if code != "" && industry != "" {
+						SetIndustry(code+".TWO", industry)
+						count++
+					}
+				}
+				log.Printf("[industry] TPEx (alt): loaded %d industry classifications", count)
+			}
+		}
+	} else {
+		log.Printf("[industry] TPEx classification fetch failed: %v", err)
+	}
 }

@@ -1,5 +1,9 @@
 package service
 
+import (
+	"sync"
+)
+
 // conceptTags maps stock symbols to their concept/theme tag (概念股標籤)
 var conceptTags = map[string]string{
 	// ── 半導體 ──
@@ -65,8 +69,146 @@ var conceptTags = map[string]string{
 	"6863.TWO": "AI 邊緣運算",
 }
 
-// industryMap maps stock symbols to TWSE industry classification
-var industryMap = map[string]string{
+// ── Global Industry Registry ──
+// Populated at runtime from TWSE/TPEx API or stock list data.
+
+type industryRegistry struct {
+	mu   sync.RWMutex
+	data map[string]string // symbol → industry
+}
+
+var globalIndustry = &industryRegistry{
+	data: make(map[string]string),
+}
+
+// SetIndustries bulk-updates the industry registry (called after TWSE/TPEx fetch).
+func SetIndustries(stocks []struct{ Symbol, Industry string }) {
+	globalIndustry.mu.Lock()
+	defer globalIndustry.mu.Unlock()
+	for _, s := range stocks {
+		if s.Industry != "" {
+			globalIndustry.data[s.Symbol] = s.Industry
+		}
+	}
+}
+
+// SetIndustry sets the industry for a single symbol.
+func SetIndustry(symbol, industry string) {
+	globalIndustry.mu.Lock()
+	defer globalIndustry.mu.Unlock()
+	if industry != "" {
+		globalIndustry.data[symbol] = industry
+	}
+}
+
+// GetConceptTag returns the concept tag for a stock symbol
+func GetConceptTag(symbol string) string {
+	if tag, ok := conceptTags[symbol]; ok {
+		return tag
+	}
+	return ""
+}
+
+// GetIndustry returns the industry for a stock symbol.
+// Priority: 1) dynamic registry  2) static map  3) code-range heuristic
+func GetIndustry(symbol, name string) string {
+	// 1. Check dynamic registry (populated from TWSE/TPEx API)
+	globalIndustry.mu.RLock()
+	if ind, ok := globalIndustry.data[symbol]; ok {
+		globalIndustry.mu.RUnlock()
+		return ind
+	}
+	globalIndustry.mu.RUnlock()
+
+	// 2. Check static map (legacy, for fallback stocks)
+	if ind, ok := staticIndustryMap[symbol]; ok {
+		return ind
+	}
+
+	// 3. Code-range heuristic for TWSE stocks
+	code := symbol
+	if idx := len(code) - 3; idx > 0 && (code[idx:] == ".TW" || false) {
+		code = code[:idx]
+	} else if idx := len(code) - 4; idx > 0 && code[idx:] == ".TWO" {
+		code = code[:idx]
+	}
+	if len(code) == 4 && code[0] >= '0' && code[0] <= '9' {
+		return classifyByCode(code)
+	}
+
+	return "其他"
+}
+
+// classifyByCode uses TWSE code ranges to guess industry.
+// This is a rough heuristic; real classification comes from the API.
+func classifyByCode(code string) string {
+	if len(code) < 2 {
+		return "其他"
+	}
+	prefix2 := code[:2]
+	switch prefix2 {
+	case "11":
+		return "水泥"
+	case "12":
+		return "食品"
+	case "13":
+		return "塑膠"
+	case "14":
+		return "紡織纖維"
+	case "15":
+		return "電機機械"
+	case "16":
+		return "電器電纜"
+	case "17":
+		return "化學"
+	case "18":
+		return "生技醫療"
+	case "19":
+		return "玻璃陶瓷"
+	case "20":
+		return "鋼鐵"
+	case "21":
+		return "橡膠"
+	case "22":
+		return "汽車"
+	case "23":
+		return "電子"
+	case "24":
+		return "電子"
+	case "25":
+		return "建材營造"
+	case "26":
+		return "航運"
+	case "27":
+		return "觀光餐旅"
+	case "28":
+		return "金融保險"
+	case "29":
+		return "貿易百貨"
+	case "30", "31", "32", "33", "34", "35", "36", "37", "38", "39":
+		return "電子"
+	case "40", "41", "42", "43", "44", "45", "46", "47", "48", "49":
+		return "電子"
+	case "50", "51", "52", "53", "54", "55", "56", "57", "58":
+		return "電子"
+	case "59":
+		return "金融保險"
+	case "60", "61", "62", "63", "64", "65", "66", "67", "68":
+		return "電子"
+	case "69":
+		return "電子"
+	case "80", "81", "82", "83", "84", "85", "86", "87", "88", "89":
+		return "電子"
+	case "91":
+		return "其他"
+	case "99":
+		return "存託憑證"
+	}
+	return "其他"
+}
+
+// staticIndustryMap is the legacy static mapping (kept for fallback stocks)
+var staticIndustryMap = map[string]string{
 	// 半導體
 	"2330.TW": "半導體", "2303.TW": "半導體", "2454.TW": "半導體",
 	"3034.TW": "半導體", "2379.TW": "半導體", "3661.TW": "半導體",
@@ -89,17 +231,17 @@ var industryMap = map[string]string{
 	// 光電
 	"2409.TW": "光電", "3481.TW": "光電", "6116.TW": "光電",
 	"3023.TW": "光電", "6176.TW": "光電",
-	// 散熱 / 機殼
+	// 散熱
 	"2360.TW": "散熱", "4938.TW": "散熱", "3504.TW": "散熱",
 	"6239.TW": "散熱", "6285.TW": "散熱",
 	// 金融保險
-	"2881.TW": "金融", "2882.TW": "金融", "2883.TW": "金融",
-	"2884.TW": "金融", "2885.TW": "金融", "2886.TW": "金融",
-	"2887.TW": "金融", "2880.TW": "金融", "2891.TW": "金融",
-	"2892.TW": "金融", "5880.TW": "金融", "2801.TW": "金融",
-	"2834.TW": "金融", "2838.TW": "金融", "2845.TW": "金融", "2823.TW": "金融",
-	// 塑化
-	"1301.TW": "塑化", "1303.TW": "塑化", "1326.TW": "塑化",
+	"2881.TW": "金融保險", "2882.TW": "金融保險", "2883.TW": "金融保險",
+	"2884.TW": "金融保險", "2885.TW": "金融保險", "2886.TW": "金融保險",
+	"2887.TW": "金融保險", "2880.TW": "金融保險", "2891.TW": "金融保險",
+	"2892.TW": "金融保險", "5880.TW": "金融保險", "2801.TW": "金融保險",
+	"2834.TW": "金融保險", "2838.TW": "金融保險", "2845.TW": "金融保險", "2823.TW": "金融保險",
+	// 塑膠
+	"1301.TW": "塑膠", "1303.TW": "塑膠", "1326.TW": "塑膠",
 	// 鋼鐵
 	"2002.TW": "鋼鐵", "2006.TW": "鋼鐵", "9802.TW": "鋼鐵",
 	// 水泥
@@ -110,68 +252,16 @@ var industryMap = map[string]string{
 	// 食品
 	"1216.TW": "食品", "1229.TW": "食品", "2912.TW": "食品",
 	// 生技醫療
-	"4743.TW": "生技", "6446.TW": "生技", "6472.TW": "生技",
-	"1760.TW": "生技", "4174.TW": "生技", "4142.TW": "生技",
-	"1795.TW": "生技", "6547.TW": "生技",
+	"4743.TW": "生技醫療", "6446.TW": "生技醫療", "6472.TW": "生技醫療",
+	"1760.TW": "生技醫療", "4174.TW": "生技醫療", "4142.TW": "生技醫療",
+	"1795.TW": "生技醫療", "6547.TW": "生技醫療",
 	// 汽車
 	"2201.TW": "汽車", "2207.TW": "汽車", "1319.TW": "汽車",
 	// 電機機械
-	"1507.TW": "電機", "2049.TW": "電機", "4510.TW": "電機",
+	"1507.TW": "電機機械", "2049.TW": "電機機械", "4510.TW": "電機機械",
 	// 綠能
 	"6244.TW": "綠能", "2374.TW": "綠能", "3576.TW": "綠能",
 	"6443.TW": "綠能", "6464.TW": "綠能",
 	// 國防
 	"2208.TW": "國防", "2634.TW": "國防",
-}
-
-// GetConceptTag returns the concept tag for a stock symbol
-func GetConceptTag(symbol string) string {
-	if tag, ok := conceptTags[symbol]; ok {
-		return tag
-	}
-	return ""
-}
-
-// GetIndustry returns the industry for a stock symbol.
-// Falls back to guessing from name if not in map.
-func GetIndustry(symbol, name string) string {
-	if ind, ok := industryMap[symbol]; ok {
-		return ind
-	}
-	// OTC stocks
-	if tag, ok := conceptTags[symbol]; ok {
-		// Derive industry from concept tag
-		switch {
-		case contains(tag, "IC") || contains(tag, "晶") || contains(tag, "封裝") || contains(tag, "記憶體") || contains(tag, "ASIC") || contains(tag, "矽智財"):
-			return "半導體"
-		case contains(tag, "AI") || contains(tag, "伺服器"):
-			return "電腦及週邊"
-		case contains(tag, "散熱"):
-			return "散熱"
-		case contains(tag, "PCB") || contains(tag, "載板") || contains(tag, "軟板"):
-			return "電子零組件"
-		case contains(tag, "光通訊") || contains(tag, "網通") || contains(tag, "衛星"):
-			return "通信網路"
-		case contains(tag, "金控") || contains(tag, "銀行") || contains(tag, "壽險"):
-			return "金融"
-		case contains(tag, "新藥") || contains(tag, "醫"):
-			return "生技"
-		case contains(tag, "航"):
-			return "航運"
-		}
-	}
-	return "其他"
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
-}
-
-func containsStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

@@ -12,8 +12,9 @@ type OHLCV struct {
 
 // StockInfo holds basic stock metadata
 type StockInfo struct {
-	Symbol string `json:"symbol"`
-	Name   string `json:"name"`
+	Symbol   string `json:"symbol"`
+	Name     string `json:"name"`
+	Industry string `json:"industry,omitempty"` // 產業分類
 }
 
 // StockChartData is the full chart payload for a symbol
