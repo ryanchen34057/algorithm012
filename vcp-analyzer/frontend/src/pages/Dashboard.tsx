@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { scanGap, scanBreakout, scanPeakAttack, scanSuperPerf, GainPeriod, MarketFilter } from '../services/api';
-import { GapAnalysis, BreakoutAnalysis, PeakAttackAnalysis, SuperPerfAnalysis, IndustryHeat, PatternType, VolumeCondition } from '../types';
+import { scanGap, scanBreakout, scanPeakAttack, scanSuperPerf, scanElitePick, GainPeriod, MarketFilter } from '../services/api';
+import { GapAnalysis, BreakoutAnalysis, PeakAttackAnalysis, SuperPerfAnalysis, IndustryHeat, ElitePickAnalysis, MarketStatus, PatternType, VolumeCondition } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import StockRow from '../components/StockRow';
@@ -8,9 +8,10 @@ import BreakoutRow from '../components/BreakoutRow';
 import PeakAttackRow from '../components/PeakAttackRow';
 import SuperPerfRow from '../components/SuperPerfRow';
 import IndustryHeatmap from '../components/IndustryHeatmap';
+import ElitePickRow from '../components/ElitePickRow';
 
 // ── Scanner Tabs ──
-type ScannerTab = 'gap' | 'breakout' | 'peakattack' | 'superperf';
+type ScannerTab = 'gap' | 'breakout' | 'peakattack' | 'superperf' | 'elitepick';
 
 // ── Gap Scanner Types ──
 type DirectionFilter = 'all' | 'long' | 'short';
@@ -85,6 +86,24 @@ const SUPERPERF_DEFAULTS: SuperPerfFilter = {
   gainPeriod: '3m', minGainPct: 0, marketFilter: 'all',
 };
 
+// ── Elite Pick Scanner Types ──
+interface ElitePickFilter {
+  minPrice: number;
+  maxPrice: number;
+  minVolume: number;
+  volShrinkMax: number;
+  nearHighPct: number;
+  rangeMaxPct: number;
+  lookbackDays: number;
+  maxLoss: number;
+}
+
+const ELITE_PICK_DEFAULTS: ElitePickFilter = {
+  minPrice: 15, maxPrice: 500, minVolume: 300,
+  volShrinkMax: 0.8, nearHighPct: 10, rangeMaxPct: 10,
+  lookbackDays: 120, maxLoss: 5,
+};
+
 export default function Dashboard() {
   const c = useColors();
   const [tab, setTab] = useState<ScannerTab>('gap');
@@ -105,6 +124,11 @@ export default function Dashboard() {
   const [superPerfStocks, setSuperPerfStocks] = useState<SuperPerfAnalysis[]>([]);
   const [superPerfIndustries, setSuperPerfIndustries] = useState<IndustryHeat[]>([]);
   const [superPerfFilter, setSuperPerfFilter] = useState<SuperPerfFilter>({ ...SUPERPERF_DEFAULTS });
+
+  // ── Elite Pick state ──
+  const [elitePickStocks, setElitePickStocks] = useState<ElitePickAnalysis[]>([]);
+  const [elitePickMarket, setElitePickMarket] = useState<MarketStatus | null>(null);
+  const [elitePickFilter, setElitePickFilter] = useState<ElitePickFilter>({ ...ELITE_PICK_DEFAULTS });
 
   // ── Shared state ──
   const [loading, setLoading] = useState(false);
@@ -150,7 +174,7 @@ export default function Dashboard() {
         setPeakAttackStocks(result.stocks ?? []);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
-      } else {
+      } else if (tab === 'superperf') {
         const result = await scanSuperPerf({
           minPrice: superPerfFilter.minPrice, maxPrice: superPerfFilter.maxPrice,
           minVolume: superPerfFilter.minVolume, gainPeriod: superPerfFilter.gainPeriod,
@@ -158,6 +182,17 @@ export default function Dashboard() {
         });
         setSuperPerfStocks(result.stocks ?? []);
         setSuperPerfIndustries(result.industries ?? []);
+        setScannedAt(result.scannedAt);
+        setTotalScanned(result.scanned);
+      } else {
+        const result = await scanElitePick({
+          minPrice: elitePickFilter.minPrice, maxPrice: elitePickFilter.maxPrice,
+          minVolume: elitePickFilter.minVolume, volShrinkMax: elitePickFilter.volShrinkMax,
+          nearHighPct: elitePickFilter.nearHighPct, rangeMaxPct: elitePickFilter.rangeMaxPct,
+          lookbackDays: elitePickFilter.lookbackDays, maxLoss: elitePickFilter.maxLoss,
+        });
+        setElitePickStocks(result.stocks ?? []);
+        setElitePickMarket(result.market ?? null);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
       }
@@ -173,7 +208,8 @@ export default function Dashboard() {
     if (tab === 'gap') setGapFilter({ ...GAP_DEFAULTS });
     else if (tab === 'breakout') setBreakoutFilter({ ...BREAKOUT_DEFAULTS });
     else if (tab === 'peakattack') setPeakAttackFilter({ ...PEAK_ATTACK_DEFAULTS });
-    else setSuperPerfFilter({ ...SUPERPERF_DEFAULTS });
+    else if (tab === 'superperf') setSuperPerfFilter({ ...SUPERPERF_DEFAULTS });
+    else setElitePickFilter({ ...ELITE_PICK_DEFAULTS });
   };
 
   return (
@@ -183,7 +219,7 @@ export default function Dashboard() {
         <div>
           <h1 style={{ ...S.title, color: c.text }}>台股智慧掃描系統</h1>
           <p style={{ ...S.subtitle, color: c.textMuted }}>
-            震撼跳空 · 突破前高 · 攻頂突破 · 超級績效
+            震撼跳空 · 突破前高 · 攻頂突破 · 超級績效 · 精選突破
           </p>
         </div>
         <ThemeToggle />
@@ -191,7 +227,7 @@ export default function Dashboard() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, background: c.bgCard, borderRadius: 8, padding: 4, border: `1px solid ${c.border}` }}>
-        {([['gap', '震撼跳空'], ['breakout', '突破前高'], ['peakattack', '攻頂突破'], ['superperf', '超級績效']] as const).map(([key, label]) => (
+        {([['gap', '震撼跳空'], ['breakout', '突破前高'], ['peakattack', '攻頂突破'], ['superperf', '超級績效'], ['elitepick', '精選突破']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -221,6 +257,9 @@ export default function Dashboard() {
       {tab === 'superperf' && (
         <SuperPerfFilterBar filter={superPerfFilter} setFilter={setSuperPerfFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
       )}
+      {tab === 'elitepick' && (
+        <ElitePickFilterBar filter={elitePickFilter} setFilter={setElitePickFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
+      )}
 
       {/* Error */}
       {error && (
@@ -246,6 +285,9 @@ export default function Dashboard() {
       )}
       {tab === 'superperf' && (
         <SuperPerfResults stocks={superPerfStocks} industries={superPerfIndustries} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
+      )}
+      {tab === 'elitepick' && (
+        <ElitePickResults stocks={elitePickStocks} market={elitePickMarket} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
       )}
     </div>
   );
@@ -532,6 +574,130 @@ function PeakAttackResults({ stocks, loading, scannedAt, totalScanned }: {
 
       <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合攻頂突破條件的股票。" />
     </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ELITE PICK SCANNER (精選突破)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ElitePickFilterBar({ filter, setFilter, loading, onScan, onReset }: {
+  filter: ElitePickFilter; setFilter: React.Dispatch<React.SetStateAction<ElitePickFilter>>;
+  loading: boolean; onScan: () => void; onReset: () => void;
+}) {
+  const c = useColors();
+  return (
+    <>
+      <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>價格 & 成交量</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput label="最低股價（元）" value={filter.minPrice} onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))} hint="建議 15+" />
+            <FilterInput label="最高股價（元）" value={filter.maxPrice} onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))} hint="建議 500" />
+            <FilterInput label="最低日均量（張）" value={filter.minVolume} onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))} hint="ADV20, 建議 300+" />
+          </div>
+        </div>
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>篩選條件</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput label="量縮比例上限" value={filter.volShrinkMax} onChange={(v) => setFilter((f) => ({ ...f, volShrinkMax: v }))} hint="5日量/20日量, 建議 0.8" step={0.05} />
+            <FilterInput label="距前高最大（%）" value={filter.nearHighPct} onChange={(v) => setFilter((f) => ({ ...f, nearHighPct: v }))} hint="建議 5–10" step={1} />
+            <FilterInput label="波動收斂上限（%）" value={filter.rangeMaxPct} onChange={(v) => setFilter((f) => ({ ...f, rangeMaxPct: v }))} hint="高點÷1.1, 建議 10" step={1} />
+            <FilterInput label="前高回看天數" value={filter.lookbackDays} onChange={(v) => setFilter((f) => ({ ...f, lookbackDays: v }))} hint="建議 60–120" />
+          </div>
+        </div>
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>部位管理</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput label="每筆最大虧損（萬）" value={filter.maxLoss} onChange={(v) => setFilter((f) => ({ ...f, maxLoss: v }))} hint="停損回推張數" step={1} />
+          </div>
+        </div>
+        <ScanActions loading={loading} onScan={onScan} onReset={onReset} />
+      </div>
+
+      <div style={S.legend}>
+        <LegendItem color="#a78bfa" label="杯型/U型/N型" />
+        <LegendItem color="#f59e0b" label="接近前高" />
+        <LegendItem color="#22c55e" label="量縮整理" />
+        <LegendItem color="#ef4444" label="出場訊號" />
+      </div>
+
+      <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
+        <strong style={{ color: c.text }}>精選突破策略（10條選股紀律）：</strong><br />
+        ① 量縮：近5日均量 {'<'} 近20日均量的 {(filter.volShrinkMax * 100).toFixed(0)}%<br />
+        ② 快過高：距前高 {'<'} {filter.nearHighPct}%（回看 {filter.lookbackDays} 日）<br />
+        ③ 波動收斂：近20日振幅 {'<'} {filter.rangeMaxPct}%<br />
+        ④ 整理型態：偵測 U型 / N型 / 杯型<br />
+        ⑤ 大盤判斷：自動檢測加權指數多空（掃描時顯示）<br />
+        ⑦⑧ 出場訊號：大量長黑K → 賣一半 / 跌破MA10 → 全賣<br />
+        ⑨⑩ 停損回推：依支撐或MA20設停損，最大虧損 {filter.maxLoss} 萬 → 算出張數<br />
+        <span style={{ color: c.textMuted }}>⑥ 基本面（營收/獲利年增率）需另接公開資訊觀測站，暫未實作</span>
+      </div>
+    </>
+  );
+}
+
+function ElitePickResults({ stocks, market, loading, scannedAt, totalScanned }: {
+  stocks: ElitePickAnalysis[]; market: MarketStatus | null;
+  loading: boolean; scannedAt: string; totalScanned: number;
+}) {
+  const c = useColors();
+  const sellCount = stocks.filter((s) => s.sellSignal !== '').length;
+
+  return (
+    <>
+      {/* Market status banner */}
+      {market && scannedAt && !loading && (
+        <div style={{
+          background: market.trend === 'bull' ? c.up + '15' : market.trend === 'bear' ? '#ef444420' : c.bgCard,
+          border: `1px solid ${market.trend === 'bull' ? c.up + '44' : market.trend === 'bear' ? '#ef444444' : c.border}`,
+          borderRadius: 8, padding: '12px 20px', display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap',
+        }}>
+          <div>
+            <span style={{ fontSize: 12, color: c.textMuted }}>大盤（加權指數）</span>
+            <div style={{ fontSize: 20, fontWeight: 800, color: c.text }}>{market.indexPrice.toLocaleString()}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <MiniStat label="MA20" value={market.ma20} c={c} />
+            <MiniStat label="MA60" value={market.ma60} c={c} />
+            <MiniStat label="MA120" value={market.ma120} c={c} />
+          </div>
+          <div style={{
+            fontWeight: 700, fontSize: 14, padding: '4px 12px', borderRadius: 4,
+            background: market.trend === 'bull' ? c.up + '22' : market.trend === 'bear' ? '#ef444422' : c.bgInput,
+            color: market.trend === 'bull' ? c.up : market.trend === 'bear' ? '#ef4444' : c.textSecondary,
+          }}>
+            {market.trendLabel}
+          </div>
+        </div>
+      )}
+
+      {scannedAt && !loading && (
+        <div style={{ color: c.textDim, fontSize: 13 }}>
+          掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
+          &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
+          <strong style={{ color: c.text }}>{stocks.length}</strong> 支精選突破
+          {sellCount > 0 && (
+            <span style={{ color: '#ef4444' }}>（{sellCount} 支有出場訊號）</span>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {stocks.map((s) => <ElitePickRow key={s.symbol} stock={s} />)}
+      </div>
+
+      <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合精選突破條件的股票。" />
+    </>
+  );
+}
+
+function MiniStat({ label, value, c }: { label: string; value: number; c: ReturnType<typeof useColors> }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span style={{ fontSize: 10, color: c.textMuted }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{value.toLocaleString()}</span>
+    </div>
   );
 }
 

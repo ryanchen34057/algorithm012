@@ -28,12 +28,14 @@ func NewRouter() http.Handler {
 	breakoutScanner := service.NewBreakoutScanner()
 	peakAttackScanner := service.NewPeakAttackScanner()
 	superPerfScanner := service.NewSuperPerfScanner()
+	elitePickScanner := service.NewElitePickScanner()
 
 	stockH := handlers.NewStockHandler(ds, scanner)
 	gapH := handlers.NewGapHandler(ds, scanner)
 	breakoutH := handlers.NewBreakoutHandler(ds, breakoutScanner)
 	peakAttackH := handlers.NewPeakAttackHandler(ds, peakAttackScanner)
 	superPerfH := handlers.NewSuperPerfHandler(ds, superPerfScanner)
+	elitePickH := handlers.NewElitePickHandler(ds, elitePickScanner)
 
 	mux := http.NewServeMux()
 
@@ -48,6 +50,9 @@ func NewRouter() http.Handler {
 
 	// Super performance scan (scans full market)
 	mux.HandleFunc("/api/superperf/scan", superPerfH.Scan)
+
+	// Elite pick scan (精選突破)
+	mux.HandleFunc("/api/elitepick/scan", elitePickH.Scan)
 
 	// Per-stock endpoints
 	mux.HandleFunc("/api/stock/", func(w http.ResponseWriter, r *http.Request) {

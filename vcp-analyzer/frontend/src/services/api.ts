@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ScanResult, StockChartData, GapAnalysis, PositionResult, BreakoutScanResult, VolumeCondition, PatternType, PeakAttackScanResult, SuperPerfScanResult } from '../types';
+import { ScanResult, StockChartData, GapAnalysis, PositionResult, BreakoutScanResult, VolumeCondition, PatternType, PeakAttackScanResult, SuperPerfScanResult, ElitePickScanResult } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8090';
 
@@ -80,6 +80,26 @@ export interface SuperPerfScanParams {
   marketFilter?: MarketFilter;
   concurrency?: number;
 }
+
+export interface ElitePickScanParams {
+  minPrice?: number;
+  maxPrice?: number;
+  minVolume?: number;
+  volShrinkMax?: number;
+  nearHighPct?: number;
+  rangeMaxPct?: number;
+  lookbackDays?: number;
+  maxLoss?: number;
+  concurrency?: number;
+}
+
+export const scanElitePick = (params: ElitePickScanParams = {}): Promise<ElitePickScanResult> => {
+  const p = new URLSearchParams();
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined) p.set(key, String(val));
+  }
+  return api.get<ElitePickScanResult>(`/api/elitepick/scan?${p.toString()}`).then(r => r.data);
+};
 
 export const scanSuperPerf = (params: SuperPerfScanParams = {}): Promise<SuperPerfScanResult> => {
   const p = new URLSearchParams();

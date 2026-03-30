@@ -189,6 +189,66 @@ export interface SuperPerfScanResult {
   scanned: number;
 }
 
+// ── Elite Pick Scanner (精選突破) ──
+
+export type PatternShapeType = 'u_shape' | 'n_shape' | 'cup' | 'none';
+export type MarketTrendType = 'bull' | 'bear' | 'neutral';
+export type SellSignalType = '' | 'big_black_k' | 'below_ma10' | 'both';
+
+export interface ElitePickAnalysis {
+  symbol: string;
+  name: string;
+  market: string;
+  industry: string;
+  conceptTag: string;
+  currentPrice: number;
+  vol5d: number;
+  vol20d: number;
+  volShrink: number;
+  prevHigh: number;
+  prevHighDate: string;
+  distPct: number;
+  rangeHigh: number;
+  rangeLow: number;
+  rangePct: number;
+  pattern: PatternShapeType;
+  patternLabel: string;
+  ma10: number;
+  ma20: number;
+  ma60: number;
+  ma120: number;
+  ma200: number;
+  sellSignal: SellSignalType;
+  sellLabel: string;
+  stopLoss: number;
+  stopLabel: string;
+  entryPrice: number;
+  target: number;
+  targetLabel: string;
+  rewardRisk: number;
+  suggestLots: number;
+  adv20: number;
+  todayVolume: number;
+  score: number;
+}
+
+export interface MarketStatus {
+  indexPrice: number;
+  ma60: number;
+  ma120: number;
+  ma20: number;
+  trend: MarketTrendType;
+  trendLabel: string;
+}
+
+export interface ElitePickScanResult {
+  stocks: ElitePickAnalysis[];
+  market: MarketStatus;
+  scannedAt: string;
+  total: number;
+  scanned: number;
+}
+
 export interface PositionResult {
   symbol: string;
   entryPrice: number;
