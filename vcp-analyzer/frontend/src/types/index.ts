@@ -249,6 +249,51 @@ export interface ElitePickScanResult {
   scanned: number;
 }
 
+// ── MA Pullback Scanner (均線回踩) ──
+
+export interface MAPullbackAnalysis {
+  symbol: string;
+  name: string;
+  market: string;
+  industry: string;
+  conceptTag: string;
+  currentPrice: number;
+  dailyMa20: number;
+  dailyMa200: number;
+  dailyMa20Slope: number;
+  dailyDistMa20: number;
+  weeklyMa20: number;
+  weeklyMa200: number;
+  weeklyMa20Slope: number;
+  weeklyDistMa20: number;
+  weeklyClose: number;
+  monthlyMa20: number;
+  monthlyMa200: number;
+  monthlyMa20Slope: number;
+  monthlyDistMa20: number;
+  monthlyClose: number;
+  dailyOk: boolean;
+  weeklyOk: boolean;
+  monthlyOk: boolean;
+  allOk: boolean;
+  entryPrice: number;
+  stopLoss: number;
+  stopLabel: string;
+  target: number;
+  targetLabel: string;
+  rewardRisk: number;
+  adv20: number;
+  todayVolume: number;
+  score: number;
+}
+
+export interface MAPullbackScanResult {
+  stocks: MAPullbackAnalysis[];
+  scannedAt: string;
+  total: number;
+  scanned: number;
+}
+
 export interface PositionResult {
   symbol: string;
   entryPrice: number;

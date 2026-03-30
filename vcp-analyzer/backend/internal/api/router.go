@@ -29,6 +29,7 @@ func NewRouter() http.Handler {
 	peakAttackScanner := service.NewPeakAttackScanner()
 	superPerfScanner := service.NewSuperPerfScanner()
 	elitePickScanner := service.NewElitePickScanner()
+	maPullbackScanner := service.NewMAPullbackScanner()
 
 	stockH := handlers.NewStockHandler(ds, scanner)
 	gapH := handlers.NewGapHandler(ds, scanner)
@@ -36,6 +37,7 @@ func NewRouter() http.Handler {
 	peakAttackH := handlers.NewPeakAttackHandler(ds, peakAttackScanner)
 	superPerfH := handlers.NewSuperPerfHandler(ds, superPerfScanner)
 	elitePickH := handlers.NewElitePickHandler(ds, elitePickScanner)
+	maPullbackH := handlers.NewMAPullbackHandler(ds, maPullbackScanner)
 
 	mux := http.NewServeMux()
 
@@ -53,6 +55,9 @@ func NewRouter() http.Handler {
 
 	// Elite pick scan (精選突破)
 	mux.HandleFunc("/api/elitepick/scan", elitePickH.Scan)
+
+	// MA pullback scan (均線回踩)
+	mux.HandleFunc("/api/mapullback/scan", maPullbackH.Scan)
 
 	// Per-stock endpoints
 	mux.HandleFunc("/api/stock/", func(w http.ResponseWriter, r *http.Request) {

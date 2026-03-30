@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { scanGap, scanBreakout, scanPeakAttack, scanSuperPerf, scanElitePick, GainPeriod, MarketFilter } from '../services/api';
-import { GapAnalysis, BreakoutAnalysis, PeakAttackAnalysis, SuperPerfAnalysis, IndustryHeat, ElitePickAnalysis, MarketStatus, PatternType, VolumeCondition } from '../types';
+import { scanGap, scanBreakout, scanPeakAttack, scanSuperPerf, scanElitePick, scanMAPullback, GainPeriod, MarketFilter } from '../services/api';
+import { GapAnalysis, BreakoutAnalysis, PeakAttackAnalysis, SuperPerfAnalysis, IndustryHeat, ElitePickAnalysis, MarketStatus, MAPullbackAnalysis, PatternType, VolumeCondition } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import StockRow from '../components/StockRow';
@@ -9,9 +9,10 @@ import PeakAttackRow from '../components/PeakAttackRow';
 import SuperPerfRow from '../components/SuperPerfRow';
 import IndustryHeatmap from '../components/IndustryHeatmap';
 import ElitePickRow from '../components/ElitePickRow';
+import MAPullbackRow from '../components/MAPullbackRow';
 
 // ── Scanner Tabs ──
-type ScannerTab = 'gap' | 'breakout' | 'peakattack' | 'superperf' | 'elitepick';
+type ScannerTab = 'gap' | 'breakout' | 'peakattack' | 'superperf' | 'elitepick' | 'mapullback';
 
 // ── Gap Scanner Types ──
 type DirectionFilter = 'all' | 'long' | 'short';
@@ -105,6 +106,21 @@ const ELITE_PICK_DEFAULTS: ElitePickFilter = {
   lookbackDays: 120, maxLoss: 5, minScore: 40,
 };
 
+// ── MA Pullback Scanner Types ──
+interface MAPullbackFilter {
+  minPrice: number;
+  maxPrice: number;
+  minVolume: number;
+  pullbackPct: number;
+  slopeDays: number;
+  minScore: number;
+}
+
+const MA_PULLBACK_DEFAULTS: MAPullbackFilter = {
+  minPrice: 15, maxPrice: 9999, minVolume: 300,
+  pullbackPct: 3, slopeDays: 5, minScore: 50,
+};
+
 export default function Dashboard() {
   const c = useColors();
   const [tab, setTab] = useState<ScannerTab>('gap');
@@ -130,6 +146,10 @@ export default function Dashboard() {
   const [elitePickStocks, setElitePickStocks] = useState<ElitePickAnalysis[]>([]);
   const [elitePickMarket, setElitePickMarket] = useState<MarketStatus | null>(null);
   const [elitePickFilter, setElitePickFilter] = useState<ElitePickFilter>({ ...ELITE_PICK_DEFAULTS });
+
+  // ── MA Pullback state ──
+  const [maPullbackStocks, setMaPullbackStocks] = useState<MAPullbackAnalysis[]>([]);
+  const [maPullbackFilter, setMaPullbackFilter] = useState<MAPullbackFilter>({ ...MA_PULLBACK_DEFAULTS });
 
   // ── Shared state ──
   const [loading, setLoading] = useState(false);
@@ -197,6 +217,15 @@ export default function Dashboard() {
         setElitePickMarket(result.market ?? null);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
+      } else {
+        const result = await scanMAPullback({
+          minPrice: maPullbackFilter.minPrice, maxPrice: maPullbackFilter.maxPrice,
+          minVolume: maPullbackFilter.minVolume, pullbackPct: maPullbackFilter.pullbackPct,
+          slopeDays: maPullbackFilter.slopeDays, minScore: maPullbackFilter.minScore,
+        });
+        setMaPullbackStocks(result.stocks ?? []);
+        setScannedAt(result.scannedAt);
+        setTotalScanned(result.scanned);
       }
     } catch (e: unknown) {
       setError('掃描失敗：無法連線到後端伺服器，請確認後端是否已啟動');
@@ -211,7 +240,8 @@ export default function Dashboard() {
     else if (tab === 'breakout') setBreakoutFilter({ ...BREAKOUT_DEFAULTS });
     else if (tab === 'peakattack') setPeakAttackFilter({ ...PEAK_ATTACK_DEFAULTS });
     else if (tab === 'superperf') setSuperPerfFilter({ ...SUPERPERF_DEFAULTS });
-    else setElitePickFilter({ ...ELITE_PICK_DEFAULTS });
+    else if (tab === 'elitepick') setElitePickFilter({ ...ELITE_PICK_DEFAULTS });
+    else setMaPullbackFilter({ ...MA_PULLBACK_DEFAULTS });
   };
 
   return (
@@ -221,7 +251,7 @@ export default function Dashboard() {
         <div>
           <h1 style={{ ...S.title, color: c.text }}>台股智慧掃描系統</h1>
           <p style={{ ...S.subtitle, color: c.textMuted }}>
-            震撼跳空 · 突破前高 · 攻頂突破 · 超級績效 · 精選突破
+            震撼跳空 · 突破前高 · 攻頂突破 · 超級績效 · 精選突破 · 均線回踩
           </p>
         </div>
         <ThemeToggle />
@@ -229,7 +259,7 @@ export default function Dashboard() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, background: c.bgCard, borderRadius: 8, padding: 4, border: `1px solid ${c.border}` }}>
-        {([['gap', '震撼跳空'], ['breakout', '突破前高'], ['peakattack', '攻頂突破'], ['superperf', '超級績效'], ['elitepick', '精選突破']] as const).map(([key, label]) => (
+        {([['gap', '震撼跳空'], ['breakout', '突破前高'], ['peakattack', '攻頂突破'], ['superperf', '超級績效'], ['elitepick', '精選突破'], ['mapullback', '均線回踩']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -262,6 +292,9 @@ export default function Dashboard() {
       {tab === 'elitepick' && (
         <ElitePickFilterBar filter={elitePickFilter} setFilter={setElitePickFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
       )}
+      {tab === 'mapullback' && (
+        <MAPullbackFilterBar filter={maPullbackFilter} setFilter={setMaPullbackFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
+      )}
 
       {/* Error */}
       {error && (
@@ -290,6 +323,9 @@ export default function Dashboard() {
       )}
       {tab === 'elitepick' && (
         <ElitePickResults stocks={elitePickStocks} market={elitePickMarket} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
+      )}
+      {tab === 'mapullback' && (
+        <MAPullbackResults stocks={maPullbackStocks} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
       )}
     </div>
   );
@@ -575,6 +611,86 @@ function PeakAttackResults({ stocks, loading, scannedAt, totalScanned }: {
       </div>
 
       <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合攻頂突破條件的股票。" />
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MA PULLBACK SCANNER (均線回踩)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function MAPullbackFilterBar({ filter, setFilter, loading, onScan, onReset }: {
+  filter: MAPullbackFilter; setFilter: React.Dispatch<React.SetStateAction<MAPullbackFilter>>;
+  loading: boolean; onScan: () => void; onReset: () => void;
+}) {
+  const c = useColors();
+  return (
+    <>
+      <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>價格 & 成交量</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput label="最低股價（元）" value={filter.minPrice} onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))} hint="建議 15+" />
+            <FilterInput label="最高股價（元）" value={filter.maxPrice} onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))} hint="預設不限" />
+            <FilterInput label="最低日均量（張）" value={filter.minVolume} onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))} hint="ADV20, 建議 300+" />
+          </div>
+        </div>
+        <div style={S.filterGroup}>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>回踩條件</span>
+          <div style={S.filterGroupInputs}>
+            <FilterInput label="日線距MA20（%）" value={filter.pullbackPct} onChange={(v) => setFilter((f) => ({ ...f, pullbackPct: v }))} hint="回踩容忍度, 建議 3–5" step={0.5} />
+            <FilterInput label="斜率計算天數" value={filter.slopeDays} onChange={(v) => setFilter((f) => ({ ...f, slopeDays: v }))} hint="判斷MA20向上, 建議 5" />
+            <FilterInput label="最低分數" value={filter.minScore} onChange={(v) => setFilter((f) => ({ ...f, minScore: v }))} hint="建議 50–70" step={5} />
+          </div>
+        </div>
+        <ScanActions loading={loading} onScan={onScan} onReset={onReset} />
+      </div>
+
+      <div style={S.legend}>
+        <LegendItem color={c.up} label="三線合一（日/週/月）" />
+        <LegendItem color="#f59e0b" label="MA20 向上" />
+        <LegendItem color="#8b5cf6" label="MA200 支撐" />
+      </div>
+
+      <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
+        <strong style={{ color: c.text }}>均線回踩策略（多週期共振）：</strong><br />
+        同時檢查日線、週線、月線三個週期：<br />
+        ✅ MA20 向上（斜率 {'>'} 0）<br />
+        ✅ 收盤價在 MA20 之上（容忍 {filter.pullbackPct}% 以內的回踩）<br />
+        ✅ MA20 在 MA200 之上（多頭格局）<br />
+        日線剛好拉回到 MA20 附近 = 最佳買點（回踩分數最高）<br />
+        <span style={{ color: c.textMuted }}>
+          週線/月線從日線資料模擬而成，需較長歷史資料（至少1年）
+        </span>
+      </div>
+    </>
+  );
+}
+
+function MAPullbackResults({ stocks, loading, scannedAt, totalScanned }: {
+  stocks: MAPullbackAnalysis[]; loading: boolean; scannedAt: string; totalScanned: number;
+}) {
+  const c = useColors();
+  const allOKCount = stocks.filter((s) => s.allOk).length;
+
+  return (
+    <>
+      {scannedAt && !loading && (
+        <div style={{ color: c.textDim, fontSize: 13 }}>
+          掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
+          &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
+          <strong style={{ color: c.text }}>{stocks.length}</strong> 支均線回踩
+          {allOKCount > 0 && (
+            <span style={{ color: c.up }}>（{allOKCount} 支三線合一）</span>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {stocks.map((s) => <MAPullbackRow key={s.symbol} stock={s} />)}
+      </div>
+
+      <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合均線回踩條件的股票。" />
     </>
   );
 }
