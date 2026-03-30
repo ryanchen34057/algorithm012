@@ -33,6 +33,7 @@ func (h *ElitePickHandler) Scan(w http.ResponseWriter, r *http.Request) {
 		RangeMaxPct:     parseFloat(q.Get("rangeMaxPct"), defaults.RangeMaxPct),
 		LookbackDays:    parseInt(q.Get("lookbackDays"), defaults.LookbackDays),
 		MaxLossPerTrade: parseFloat(q.Get("maxLoss"), defaults.MaxLossPerTrade),
+		MinScore:        parseFloat(q.Get("minScore"), defaults.MinScore),
 	}
 	concurrency := parseInt(q.Get("concurrency"), 10)
 

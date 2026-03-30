@@ -96,12 +96,13 @@ interface ElitePickFilter {
   rangeMaxPct: number;
   lookbackDays: number;
   maxLoss: number;
+  minScore: number;
 }
 
 const ELITE_PICK_DEFAULTS: ElitePickFilter = {
   minPrice: 15, maxPrice: 500, minVolume: 300,
   volShrinkMax: 0.8, nearHighPct: 10, rangeMaxPct: 10,
-  lookbackDays: 120, maxLoss: 5,
+  lookbackDays: 120, maxLoss: 5, minScore: 40,
 };
 
 export default function Dashboard() {
@@ -190,6 +191,7 @@ export default function Dashboard() {
           minVolume: elitePickFilter.minVolume, volShrinkMax: elitePickFilter.volShrinkMax,
           nearHighPct: elitePickFilter.nearHighPct, rangeMaxPct: elitePickFilter.rangeMaxPct,
           lookbackDays: elitePickFilter.lookbackDays, maxLoss: elitePickFilter.maxLoss,
+          minScore: elitePickFilter.minScore,
         });
         setElitePickStocks(result.stocks ?? []);
         setElitePickMarket(result.market ?? null);
@@ -607,9 +609,10 @@ function ElitePickFilterBar({ filter, setFilter, loading, onScan, onReset }: {
           </div>
         </div>
         <div style={S.filterGroup}>
-          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>部位管理</span>
+          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>部位管理 & 門檻</span>
           <div style={S.filterGroupInputs}>
             <FilterInput label="每筆最大虧損（萬）" value={filter.maxLoss} onChange={(v) => setFilter((f) => ({ ...f, maxLoss: v }))} hint="停損回推張數" step={1} />
+            <FilterInput label="最低分數" value={filter.minScore} onChange={(v) => setFilter((f) => ({ ...f, minScore: v }))} hint="建議 40–60" step={5} />
           </div>
         </div>
         <ScanActions loading={loading} onScan={onScan} onReset={onReset} />
@@ -623,12 +626,13 @@ function ElitePickFilterBar({ filter, setFilter, loading, onScan, onReset }: {
       </div>
 
       <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
-        <strong style={{ color: c.text }}>精選突破策略（10條選股紀律）：</strong><br />
-        ① 量縮：近5日均量 {'<'} 近20日均量的 {(filter.volShrinkMax * 100).toFixed(0)}%<br />
-        ② 快過高：距前高 {'<'} {filter.nearHighPct}%（回看 {filter.lookbackDays} 日）<br />
-        ③ 波動收斂：近20日振幅 {'<'} {filter.rangeMaxPct}%<br />
-        ④ 整理型態：偵測 U型 / N型 / 杯型<br />
-        ⑤ 大盤判斷：自動檢測加權指數多空（掃描時顯示）<br />
+        <strong style={{ color: c.text }}>精選突破策略（評分制，各條件加分排序）：</strong><br />
+        ① 量縮 (20分)：5日量/20日量越低越好，{'<'}{(filter.volShrinkMax * 100).toFixed(0)}% 滿分<br />
+        ② 快過高 (25分)：距前高越近越好，{'<'}{filter.nearHighPct}% 高分（回看{filter.lookbackDays}日）<br />
+        ③ 波動收斂 (20分)：近20日振幅越小越好，{'<'}{filter.rangeMaxPct}% 高分<br />
+        ④ 整理型態 (15分)：杯型 {'>'} U型 {'>'} N型<br />
+        ⑤ 趨勢排列 (15分)：價格{'>'} MA20 {'>'} MA60 滿分<br />
+        ⑥ 風報比加分 (5分) · 最低分數門檻：{filter.minScore} 分<br />
         ⑦⑧ 出場訊號：大量長黑K → 賣一半 / 跌破MA10 → 全賣<br />
         ⑨⑩ 停損回推：依支撐或MA20設停損，最大虧損 {filter.maxLoss} 萬 → 算出張數<br />
         <span style={{ color: c.textMuted }}>⑥ 基本面（營收/獲利年增率）需另接公開資訊觀測站，暫未實作</span>

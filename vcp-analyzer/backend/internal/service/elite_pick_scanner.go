@@ -12,11 +12,12 @@ type ElitePickScanParams struct {
 	MinPrice       float64 // default 15
 	MaxPrice       float64 // default 500
 	MinADV20Lots   float64 // default 300
-	VolShrinkMax   float64 // 量縮比例上限 (5日量/20日量)，default 0.8 = 5日量 < 80% of 20日量
+	VolShrinkMax   float64 // 量縮比例上限 (5日量/20日量)，default 0.8
 	NearHighPct    float64 // 距前高最大 %，default 10
 	RangeMaxPct    float64 // 波動收斂上限 %，default 10
 	LookbackDays   int     // 前高回看天數，default 120
 	MaxLossPerTrade float64 // 每筆最大虧損金額（萬），用於推算張數，default 5
+	MinScore       float64 // 最低分數門檻，default 40
 }
 
 func DefaultElitePickScanParams() ElitePickScanParams {
@@ -29,6 +30,7 @@ func DefaultElitePickScanParams() ElitePickScanParams {
 		RangeMaxPct:    10,
 		LookbackDays:   120,
 		MaxLossPerTrade: 5, // 5萬
+		MinScore:       40,
 	}
 }
 
@@ -71,6 +73,9 @@ func (s *ElitePickScanner) Analyze(chart *model.StockChartData, params ElitePick
 	if n >= 200 {
 		ma200 = simpleMA(closes, 200)
 	}
+	if ma20 <= 0 || ma60 <= 0 {
+		return nil
+	}
 
 	// ── Condition 1: 5日量縮 ──
 	vol5d := avgVolumeN(candles, 5)
@@ -79,16 +84,12 @@ func (s *ElitePickScanner) Analyze(chart *model.StockChartData, params ElitePick
 	if vol20d > 0 {
 		volShrink = vol5d / vol20d
 	}
-	if volShrink > params.VolShrinkMax {
-		return nil // 量沒有縮
-	}
 
 	// ── Condition 2: 快過高 ──
 	lookback := params.LookbackDays
 	if lookback > n-10 {
 		lookback = n - 10
 	}
-	// Find previous high (exclude last 5 days to avoid counting today)
 	prevHigh := 0.0
 	prevHighIdx := 0
 	searchEnd := n - 5
@@ -106,12 +107,8 @@ func (s *ElitePickScanner) Analyze(chart *model.StockChartData, params ElitePick
 		return nil
 	}
 	distPct := (prevHigh - price) / prevHigh * 100
-	if distPct > params.NearHighPct {
-		return nil // 離前高太遠
-	}
 
-	// ── Condition 3: 波動收斂10%內 ──
-	// Use last 20 bars as the consolidation range
+	// ── Condition 3: 波動收斂 ──
 	rangeHigh, rangeLow := candles[n-20].High, candles[n-20].Low
 	for i := n - 20; i < n; i++ {
 		if candles[i].High > rangeHigh {
@@ -125,19 +122,16 @@ func (s *ElitePickScanner) Analyze(chart *model.StockChartData, params ElitePick
 	if rangeHigh > 0 {
 		rangePct = (rangeHigh - rangeLow) / rangeHigh * 100
 	}
-	if rangePct > params.RangeMaxPct {
-		return nil // 波動太大，還沒收斂
-	}
 
 	// ── Condition 4: 型態偵測 (U/N/Cup) ──
 	pattern, patternLabel := detectShape(candles, n)
 
-	// ── Trend check: basic uptrend ──
-	if ma20 <= 0 || ma60 <= 0 {
+	// ── Scoring (soft conditions — no hard filter) ──
+	score := calcEliteScore(distPct, volShrink, rangePct, pattern, price, ma20, ma60, 0)
+
+	// Filter by minimum score instead of hard conditions
+	if score < params.MinScore {
 		return nil
-	}
-	if price < ma20 {
-		return nil // 收盤價要在MA20之上
 	}
 
 	// ── Condition 7-8: 出場訊號 ──
@@ -149,11 +143,11 @@ func (s *ElitePickScanner) Analyze(chart *model.StockChartData, params ElitePick
 	// ── Target ──
 	risk := price - stopLoss
 	if risk <= 0 {
-		return nil
+		stopLoss = roundTo2(price * 0.95)
+		risk = price - stopLoss
 	}
 	target := roundTo2(price + 2*risk)
 	targetLabel := "2:1 風報比"
-	// If near 52w high, extend target
 	high52w := 0.0
 	lb := 252
 	if lb > n {
@@ -174,6 +168,12 @@ func (s *ElitePickScanner) Analyze(chart *model.StockChartData, params ElitePick
 		rr = (target - price) / risk
 	}
 
+	// Re-score with R:R included
+	score = calcEliteScore(distPct, volShrink, rangePct, pattern, price, ma20, ma60, rr)
+	if score < params.MinScore {
+		return nil
+	}
+
 	// ── Condition 10: 停損回推張數 ──
 	maxLoss := params.MaxLossPerTrade * 10000 // 萬 → 元
 	riskPerShare := price - stopLoss
@@ -185,9 +185,6 @@ func (s *ElitePickScanner) Analyze(chart *model.StockChartData, params ElitePick
 			suggestLots = 1
 		}
 	}
-
-	// ── Scoring ──
-	score := calcEliteScore(distPct, volShrink, rangePct, pattern, price, ma20, ma60, rr)
 
 	market := "上市"
 	if strings.HasSuffix(chart.Symbol, ".TWO") {
@@ -399,60 +396,83 @@ func calcEliteStopLoss(candles []model.OHLCV, n int, price, ma20 float64) (float
 func calcEliteScore(distPct, volShrink, rangePct float64, pattern model.PatternShape, price, ma20, ma60, rr float64) float64 {
 	score := 0.0
 
-	// Distance to high (0-25 pts): closer = better
+	// ① 距前高 (0-25 pts): closer = better
 	if distPct <= 0 {
-		score += 25
+		score += 25 // 已突破
 	} else if distPct < 3 {
-		score += 20
+		score += 22
 	} else if distPct < 5 {
-		score += 15
-	} else if distPct < 8 {
+		score += 18
+	} else if distPct < 10 {
+		score += 14
+	} else if distPct < 15 {
 		score += 10
+	} else if distPct < 20 {
+		score += 6
 	} else {
-		score += 5
+		score += 2
 	}
 
-	// Volume shrink (0-20 pts): lower = better
+	// ② 量縮 (0-20 pts): lower = better
 	if volShrink < 0.4 {
 		score += 20
 	} else if volShrink < 0.6 {
-		score += 16
-	} else if volShrink < 0.7 {
-		score += 12
+		score += 17
+	} else if volShrink < 0.8 {
+		score += 14
+	} else if volShrink < 1.0 {
+		score += 10
+	} else if volShrink < 1.2 {
+		score += 6
 	} else {
-		score += 8
+		score += 2
 	}
 
-	// Range contraction (0-20 pts): tighter = better
-	if rangePct < 3 {
+	// ③ 波動收斂 (0-20 pts): tighter = better
+	if rangePct < 5 {
 		score += 20
-	} else if rangePct < 5 {
-		score += 16
-	} else if rangePct < 7 {
-		score += 12
+	} else if rangePct < 8 {
+		score += 17
+	} else if rangePct < 10 {
+		score += 14
+	} else if rangePct < 15 {
+		score += 10
+	} else if rangePct < 20 {
+		score += 6
 	} else {
-		score += 8
+		score += 2
 	}
 
-	// Pattern (0-20 pts)
+	// ④ 型態 (0-15 pts)
 	switch pattern {
 	case model.ShapeCup:
-		score += 20
+		score += 15
 	case model.ShapeU:
-		score += 16
+		score += 13
 	case model.ShapeN:
-		score += 14
+		score += 11
 	default:
-		score += 5
+		score += 4 // 沒有明確型態也給底分
 	}
 
-	// Trend alignment (0-15 pts)
+	// ⑤ 趨勢排列 (0-15 pts)
 	if price > ma20 && ma20 > ma60 {
-		score += 15
+		score += 15 // 多頭排列
 	} else if price > ma20 {
-		score += 10
+		score += 11 // 價格在MA20之上
+	} else if price > ma60 {
+		score += 7 // 至少在MA60之上
 	} else {
+		score += 2
+	}
+
+	// 風報比加分 (0-5 pts)
+	if rr >= 3 {
 		score += 5
+	} else if rr >= 2 {
+		score += 3
+	} else if rr > 0 {
+		score += 1
 	}
 
 	return math.Min(score, 100)

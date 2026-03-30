@@ -90,6 +90,7 @@ export interface ElitePickScanParams {
   rangeMaxPct?: number;
   lookbackDays?: number;
   maxLoss?: number;
+  minScore?: number;
   concurrency?: number;
 }
 
