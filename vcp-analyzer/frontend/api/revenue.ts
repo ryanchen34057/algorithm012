@@ -1,4 +1,5 @@
 // Vercel Serverless Function: Proxy Yahoo Finance quoteSummary for revenue data
+export const config = { regions: ['hkg1'] };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
 let cachedCrumb = '';

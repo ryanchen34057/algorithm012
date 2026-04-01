@@ -1,4 +1,5 @@
 // Vercel Serverless Function: Proxy TWSE/TPEx institutional buying data
+export const config = { regions: ['hkg1'] };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
 export default async function handler(req: any, res: any) {

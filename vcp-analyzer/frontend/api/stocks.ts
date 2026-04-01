@@ -1,5 +1,7 @@
 // Vercel Serverless Function: Fetch stock list from TWSE + TPEx
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+export const config = { regions: ['hkg1'] };
+
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 interface StockInfo {
   symbol: string;
@@ -12,25 +14,30 @@ export default async function handler(req: any, res: any) {
 
   const minPrice = Number(req.query.minPrice) || 15;
   const minVolLots = Number(req.query.minVolume) || 0;
+  const debug: string[] = [];
 
   try {
     const [twse, tpex] = await Promise.allSettled([
-      fetchTWSE(minPrice, minVolLots),
-      fetchTPEx(minPrice, minVolLots),
+      fetchTWSE(minPrice, minVolLots, debug),
+      fetchTPEx(minPrice, minVolLots, debug),
     ]);
 
-    const stocks: StockInfo[] = [
-      ...(twse.status === 'fulfilled' ? twse.value : []),
-      ...(tpex.status === 'fulfilled' ? tpex.value : []),
-    ];
+    const twseStocks = twse.status === 'fulfilled' ? twse.value : [];
+    const tpexStocks = tpex.status === 'fulfilled' ? tpex.value : [];
 
-    res.json({ stocks, total: stocks.length });
+    if (twse.status === 'rejected') debug.push(`TWSE rejected: ${twse.reason}`);
+    if (tpex.status === 'rejected') debug.push(`TPEx rejected: ${tpex.reason}`);
+
+    debug.push(`TWSE: ${twseStocks.length} stocks, TPEx: ${tpexStocks.length} stocks`);
+
+    const stocks: StockInfo[] = [...twseStocks, ...tpexStocks];
+    res.json({ stocks, total: stocks.length, debug });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: String(e), debug });
   }
 }
 
-async function fetchTWSE(minPrice: number, minVolLots: number): Promise<StockInfo[]> {
+async function fetchTWSE(minPrice: number, minVolLots: number, debug: string[]): Promise<StockInfo[]> {
   const urls = [
     'https://opendata.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL',
     'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL?response=json',
@@ -38,13 +45,25 @@ async function fetchTWSE(minPrice: number, minVolLots: number): Promise<StockInf
 
   for (const url of urls) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': UA } });
+      debug.push(`TWSE trying: ${url}`);
+      const r = await fetch(url, {
+        headers: {
+          'User-Agent': UA,
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
+        },
+      });
+      debug.push(`TWSE ${url} → HTTP ${r.status}`);
       if (!r.ok) continue;
       const body = await r.json();
       let rows = Array.isArray(body) ? body : body?.data;
-      if (!Array.isArray(rows)) continue;
+      if (!Array.isArray(rows)) {
+        debug.push(`TWSE response not array, keys: ${Object.keys(body).join(',')}`);
+        continue;
+      }
+      debug.push(`TWSE raw rows: ${rows.length}`);
 
-      return rows
+      const result = rows
         .filter((r: any) => {
           const code = r.Code ?? r['證券代號'] ?? '';
           if (!/^\d{4}$/.test(code)) return false;
@@ -57,18 +76,31 @@ async function fetchTWSE(minPrice: number, minVolLots: number): Promise<StockInf
           symbol: (r.Code ?? r['證券代號']) + '.TW',
           name: r.Name ?? r['證券名稱'] ?? '',
         }));
-    } catch { continue; }
+
+      if (result.length > 0) return result;
+    } catch (e) {
+      debug.push(`TWSE ${url} error: ${e}`);
+      continue;
+    }
   }
   return [];
 }
 
-async function fetchTPEx(minPrice: number, minVolLots: number): Promise<StockInfo[]> {
+async function fetchTPEx(minPrice: number, minVolLots: number, debug: string[]): Promise<StockInfo[]> {
   try {
-    const r = await fetch('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes', {
-      headers: { 'User-Agent': UA },
+    const url = 'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes';
+    debug.push(`TPEx trying: ${url}`);
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
+      },
     });
+    debug.push(`TPEx → HTTP ${r.status}`);
     if (!r.ok) return [];
     const rows: any[] = await r.json();
+    debug.push(`TPEx raw rows: ${rows.length}`);
 
     return rows
       .filter((r) => {
@@ -83,7 +115,10 @@ async function fetchTPEx(minPrice: number, minVolLots: number): Promise<StockInf
         symbol: r.SecuritiesCompanyCode + '.TWO',
         name: r.CompanyName ?? '',
       }));
-  } catch { return []; }
+  } catch (e) {
+    debug.push(`TPEx error: ${e}`);
+    return [];
+  }
 }
 
 function parseNum(s: string): number {

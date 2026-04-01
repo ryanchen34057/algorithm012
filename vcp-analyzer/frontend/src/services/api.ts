@@ -18,6 +18,7 @@ async function fetchJSON<T>(path: string): Promise<T> {
 interface StockListResponse {
   stocks: { symbol: string; name: string }[];
   total: number;
+  debug?: string[];
 }
 
 // ── Institution Data ──
@@ -128,6 +129,12 @@ export async function scanBullPick(
   const stocks = stockListRes.stocks;
   const instMap = instRes.data ?? {};
   const total = stocks.length;
+
+  // Debug: log stock list source info
+  if (stockListRes.debug) {
+    console.log('[scanner] stock list debug:', stockListRes.debug);
+  }
+  console.log(`[scanner] ${total} stocks loaded (TWSE+TPEx), institution: ${Object.keys(instMap).length}`);
 
   // Step 2: Fetch charts in batches and analyze
   const BATCH_SIZE = 8;
