@@ -8,9 +8,6 @@ interface Props {
   stock: BullPickAnalysis;
 }
 
-const patternLabels: Record<string, string> = {
-  cup: '杯型', u_shape: 'U型', n_shape: 'N型', none: '-',
-};
 
 export default function BullPickRow({ stock }: Props) {
   const c = useColors();
@@ -60,6 +57,12 @@ export default function BullPickRow({ stock }: Props) {
             </span>
           )}
           <span style={{ color: c.text, fontSize: 17, fontWeight: 700 }}>{stock.currentPrice}</span>
+          <span style={{
+            fontSize: 13, fontWeight: 700,
+            color: stock.changePct > 0 ? c.up : stock.changePct < 0 ? c.down : c.textMuted,
+          }}>
+            {stock.changePct > 0 ? '+' : ''}{stock.changePct}%
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {stock.pattern !== 'none' && (

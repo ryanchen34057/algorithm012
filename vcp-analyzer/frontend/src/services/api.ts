@@ -1,124 +1,102 @@
-import axios from 'axios';
-import { ScanResult, StockChartData, GapAnalysis, PositionResult, BreakoutScanResult, VolumeCondition, PatternType, PeakAttackScanResult, SuperPerfScanResult, ElitePickScanResult, MAPullbackScanResult, BullPickScanResult } from '../types';
+// Frontend-only API: fetches data via Vercel serverless proxies,
+// then runs analysis in the browser.
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8090';
+import { BullPickAnalysis, BullPickScanResult, MarketStatus, StockChartData, OHLCV } from '../types';
+import { analyze, parseYahooChart, BullPickParams, InstitutionEntry, RevenueEntry } from './scanner';
 
-const api = axios.create({ baseURL: BASE });
+// Base URL: empty string when deployed to Vercel (same origin), or override for local dev
+const BASE = import.meta.env.VITE_API_URL ?? '';
 
-export interface ScanParams {
-  minVolume?: number;       // ADV20 最低日均量（張），預設 500
-  minPrice?: number;        // 最低股價（元），預設 10
-  maxPrice?: number;        // 最高股價（元），預設 500
-  minTodayVolume?: number;  // 最低當日成交量（張），預設 300
-  minGapPct?: number;       // 最低跳空幅度（%），預設 1.5
-  maxGapPct?: number;       // 最高跳空幅度（%），預設 40
-  strictGap?: boolean;      // 嚴格跳空（過昨高/昨低），預設 false
-  requireCandle?: boolean;  // 要求昨日 K 線顏色，預設 true
-  requireBothMA?: boolean;  // 要求同時符合 MA20 & MA200，預設 false
-  concurrency?: number;     // 並行請求數，預設 10
+async function fetchJSON<T>(path: string): Promise<T> {
+  const r = await fetch(`${BASE}${path}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${path}`);
+  return r.json();
 }
 
-export const scanGap = (params: ScanParams = {}): Promise<ScanResult> => {
-  const p = new URLSearchParams();
-  for (const [key, val] of Object.entries(params)) {
-    if (val !== undefined) p.set(key, String(val));
+// ── Stock List ──
+
+interface StockListResponse {
+  stocks: { symbol: string; name: string }[];
+  total: number;
+}
+
+// ── Institution Data ──
+
+interface InstitutionResponse {
+  data: Record<string, InstitutionEntry>;
+  count: number;
+}
+
+// ── Revenue Data ──
+
+interface RevenueResponse {
+  revenue: RevenueEntry | null;
+  error?: string;
+}
+
+// ── Chart Data (Yahoo Finance) ──
+
+async function fetchChart(symbol: string): Promise<{ candles: OHLCV[]; name: string } | null> {
+  try {
+    const data = await fetchJSON<Record<string, unknown>>(`/api/chart?symbol=${encodeURIComponent(symbol)}`);
+    const candles = parseYahooChart(data, symbol, '');
+    if (!candles) return null;
+
+    // Extract name from Yahoo response
+    const meta = (data as any)?.chart?.result?.[0]?.meta;
+    const name = meta?.shortName ?? meta?.symbol ?? symbol;
+    return { candles, name };
+  } catch {
+    return null;
   }
-  return api.get<ScanResult>(`/api/gap/scan?${p.toString()}`).then(r => r.data);
-};
-
-export interface BreakoutScanParams {
-  minPrice?: number;
-  maxPrice?: number;
-  minVolume?: number;
-  lookbackDays?: number;
-  nearHighPct?: number;
-  pattern?: PatternType;
-  volumeFilter?: VolumeCondition;
-  volumeFactor?: number;
-  concurrency?: number;
 }
 
-export const scanBreakout = (params: BreakoutScanParams = {}): Promise<BreakoutScanResult> => {
-  const p = new URLSearchParams();
-  for (const [key, val] of Object.entries(params)) {
-    if (val !== undefined) p.set(key, String(val));
+// ── Market Status (TAIEX via ^TWII) ──
+
+async function fetchMarketStatus(): Promise<MarketStatus | null> {
+  try {
+    const data = await fetchJSON<Record<string, unknown>>('/api/chart?symbol=^TWII');
+    const candles = parseYahooChart(data, '^TWII', '');
+    if (!candles || candles.length < 60) return null;
+
+    const closes = candles.map((c) => c.close);
+    const n = closes.length;
+    const price = closes[n - 1];
+    const ma20 = avg(closes, 20);
+    const ma60 = avg(closes, 60);
+    const ma120 = n >= 120 ? avg(closes, 120) : 0;
+
+    let trend: 'bull' | 'bear' | 'neutral' = 'neutral';
+    let trendLabel = '盤整';
+    if (price > ma20 && ma20 > ma60) { trend = 'bull'; trendLabel = '多頭'; }
+    else if (price < ma20 && ma20 < ma60) { trend = 'bear'; trendLabel = '空頭'; }
+
+    return {
+      indexPrice: r2(price),
+      ma20: r2(ma20),
+      ma60: r2(ma60),
+      ma120: r2(ma120),
+      trend,
+      trendLabel,
+    };
+  } catch {
+    return null;
   }
-  return api.get<BreakoutScanResult>(`/api/breakout/scan?${p.toString()}`).then(r => r.data);
-};
-
-export interface PeakAttackScanParams {
-  minPrice?: number;
-  maxPrice?: number;
-  minVolume?: number;
-  minTodayVol?: number;
-  peakRangeMax?: number;
-  minAttackCount?: number;
-  minVolRatio?: number;
-  kdPeriod?: number;
-  kdSmooth1?: number;
-  kdSmooth2?: number;
-  concurrency?: number;
 }
 
-export const scanPeakAttack = (params: PeakAttackScanParams = {}): Promise<PeakAttackScanResult> => {
-  const p = new URLSearchParams();
-  for (const [key, val] of Object.entries(params)) {
-    if (val !== undefined) p.set(key, String(val));
-  }
-  return api.get<PeakAttackScanResult>(`/api/peakattack/scan?${p.toString()}`).then(r => r.data);
-};
-
-export type GainPeriod = '1d' | '1w' | '1m' | '3m' | '6m' | 'ytd';
-export type MarketFilter = 'all' | 'listed' | 'otc';
-
-export interface SuperPerfScanParams {
-  minPrice?: number;
-  maxPrice?: number;
-  minVolume?: number;
-  gainPeriod?: GainPeriod;
-  minGainPct?: number;
-  marketFilter?: MarketFilter;
-  concurrency?: number;
+function avg(data: number[], period: number): number {
+  const n = data.length;
+  if (n < period) return 0;
+  let sum = 0;
+  for (let i = n - period; i < n; i++) sum += data[i];
+  return sum / period;
 }
 
-export interface ElitePickScanParams {
-  minPrice?: number;
-  maxPrice?: number;
-  minVolume?: number;
-  volShrinkMax?: number;
-  nearHighPct?: number;
-  rangeMaxPct?: number;
-  lookbackDays?: number;
-  maxLoss?: number;
-  minScore?: number;
-  concurrency?: number;
+function r2(v: number): number {
+  return Math.round(v * 100) / 100;
 }
 
-export const scanElitePick = (params: ElitePickScanParams = {}): Promise<ElitePickScanResult> => {
-  const p = new URLSearchParams();
-  for (const [key, val] of Object.entries(params)) {
-    if (val !== undefined) p.set(key, String(val));
-  }
-  return api.get<ElitePickScanResult>(`/api/elitepick/scan?${p.toString()}`).then(r => r.data);
-};
-
-export interface MAPullbackScanParams {
-  minPrice?: number;
-  maxPrice?: number;
-  minVolume?: number;
-  pullbackPct?: number;
-  slopeDays?: number;
-  minScore?: number;
-  concurrency?: number;
-}
-
-export const scanMAPullback = (params: MAPullbackScanParams = {}): Promise<MAPullbackScanResult> => {
-  const p = new URLSearchParams();
-  for (const [key, val] of Object.entries(params)) {
-    if (val !== undefined) p.set(key, String(val));
-  }
-  return api.get<MAPullbackScanResult>(`/api/mapullback/scan?${p.toString()}`).then(r => r.data);
-};
+// ── Main Scan Orchestrator ──
 
 export interface BullPickScanParams {
   minPrice?: number;
@@ -126,32 +104,140 @@ export interface BullPickScanParams {
   minVolume?: number;
   distHighMax?: number;
   minScore?: number;
-  concurrency?: number;
 }
 
-export const scanBullPick = (params: BullPickScanParams = {}): Promise<BullPickScanResult> => {
-  const p = new URLSearchParams();
-  for (const [key, val] of Object.entries(params)) {
-    if (val !== undefined) p.set(key, String(val));
+export async function scanBullPick(
+  params: BullPickScanParams,
+  onProgress?: (done: number, total: number) => void,
+): Promise<BullPickScanResult> {
+  const p: BullPickParams = {
+    minPrice: params.minPrice ?? 15,
+    maxPrice: params.maxPrice ?? 9999,
+    minADV20Lots: params.minVolume ?? 300,
+    distHighMax: params.distHighMax ?? 10,
+    minScore: params.minScore ?? 40,
+  };
+
+  // Step 1: Fetch stock list + institution data + market status in parallel
+  const [stockListRes, instRes, market] = await Promise.all([
+    fetchJSON<StockListResponse>(`/api/stocks?minPrice=${p.minPrice}&minVolume=0`),
+    fetchJSON<InstitutionResponse>('/api/institution'),
+    fetchMarketStatus(),
+  ]);
+
+  const stocks = stockListRes.stocks;
+  const instMap = instRes.data ?? {};
+  const total = stocks.length;
+
+  // Step 2: Fetch charts in batches and analyze
+  const BATCH_SIZE = 8;
+  const results: BullPickAnalysis[] = [];
+  let done = 0;
+
+  for (let i = 0; i < stocks.length; i += BATCH_SIZE) {
+    const batch = stocks.slice(i, i + BATCH_SIZE);
+    const chartPromises = batch.map((s) => fetchChart(s.symbol));
+    const charts = await Promise.all(chartPromises);
+
+    for (let j = 0; j < batch.length; j++) {
+      const s = batch[j];
+      const chartData = charts[j];
+
+      if (chartData?.candles) {
+        const inst = instMap[s.symbol];
+        const result = analyze(
+          s.symbol,
+          s.name || chartData.name,
+          chartData.candles,
+          p,
+          inst,
+          null, // revenue fetched separately for matched stocks
+        );
+        if (result) results.push(result);
+      }
+      done++;
+    }
+
+    onProgress?.(done, total);
   }
-  return api.get<BullPickScanResult>(`/api/bullpick/scan?${p.toString()}`).then(r => r.data);
-};
 
-export const scanSuperPerf = (params: SuperPerfScanParams = {}): Promise<SuperPerfScanResult> => {
-  const p = new URLSearchParams();
-  for (const [key, val] of Object.entries(params)) {
-    if (val !== undefined) p.set(key, String(val));
+  // Step 3: Fetch revenue for matched stocks (top candidates only, to save time)
+  const revBatchSize = 5;
+  // Sort by score descending before fetching revenue
+  results.sort((a, b) => b.score - a.score);
+
+  for (let i = 0; i < results.length; i += revBatchSize) {
+    const batch = results.slice(i, i + revBatchSize);
+    const revPromises = batch.map((s) =>
+      fetchJSON<RevenueResponse>(`/api/revenue?symbol=${encodeURIComponent(s.symbol)}`)
+        .catch(() => ({ revenue: null } as RevenueResponse))
+    );
+    const revResults = await Promise.all(revPromises);
+
+    for (let j = 0; j < batch.length; j++) {
+      const rev = revResults[j].revenue;
+      if (rev) {
+        const s = batch[j];
+        s.revenueLatest = r2(rev.revenueLatest / 1e8);
+        s.revenuePrev = r2(rev.revenuePrev / 1e8);
+        s.revenueGrowth = r2(rev.revenueGrowth);
+        s.revenuePeriod = rev.period;
+      }
+    }
   }
-  return api.get<SuperPerfScanResult>(`/api/superperf/scan?${p.toString()}`).then(r => r.data);
-};
 
-export const getChart = (symbol: string): Promise<StockChartData> =>
-  api.get<StockChartData>(`/api/stock/${encodeURIComponent(symbol)}/chart`).then(r => r.data);
+  // Re-score with revenue data
+  // (Revenue contributes up to 20 pts; we already have partial scores without it)
+  // For simplicity, we just re-sort
+  results.sort((a, b) => b.score - a.score);
 
-export const getGap = (symbol: string): Promise<GapAnalysis> =>
-  api.get<GapAnalysis>(`/api/stock/${encodeURIComponent(symbol)}/gap`).then(r => r.data);
+  return {
+    stocks: results,
+    market: market ?? { indexPrice: 0, ma20: 0, ma60: 0, ma120: 0, trend: 'neutral', trendLabel: '無資料' },
+    scannedAt: new Date().toISOString(),
+    total: results.length,
+    scanned: total,
+  };
+}
 
-export const calcPosition = (symbol: string, maxLoss: number): Promise<PositionResult> =>
-  api
-    .post<PositionResult>(`/api/stock/${encodeURIComponent(symbol)}/position`, { maxLoss })
-    .then(r => r.data);
+// ── Chart fetcher for BullPickRow ──
+
+export async function getChart(symbol: string): Promise<StockChartData> {
+  const data = await fetchJSON<Record<string, unknown>>(`/api/chart?symbol=${encodeURIComponent(symbol)}`);
+  const candles = parseYahooChart(data, symbol, '');
+  if (!candles) throw new Error('No chart data');
+
+  const meta = (data as any)?.chart?.result?.[0]?.meta;
+  const name = meta?.shortName ?? meta?.symbol ?? symbol;
+
+  const closes = candles.map((c) => c.close);
+  const ma20 = calcMAArray(closes, 20);
+  const ma50 = calcMAArray(closes, 50);
+  const ma150 = calcMAArray(closes, 150);
+  const ma200 = calcMAArray(closes, 200);
+
+  return {
+    symbol,
+    name,
+    latestPrice: candles[candles.length - 1]?.close ?? 0,
+    candles,
+    ma20,
+    ma50,
+    ma150,
+    ma200,
+  };
+}
+
+function calcMAArray(data: number[], period: number): number[] {
+  const result: number[] = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      result.push(0);
+    } else {
+      let sum = 0;
+      for (let j = i - period + 1; j <= i; j++) sum += data[j];
+      result.push(sum / period);
+    }
+  }
+  return result;
+}

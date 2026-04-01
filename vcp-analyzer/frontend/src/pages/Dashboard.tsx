@@ -33,17 +33,22 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [scannedAt, setScannedAt] = useState('');
   const [totalScanned, setTotalScanned] = useState(0);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   // ── Handlers ──
   const handleScan = async () => {
     setLoading(true);
     setError('');
+    setProgress({ done: 0, total: 0 });
     try {
-      const result = await scanBullPick({
-        minPrice: filter.minPrice, maxPrice: filter.maxPrice,
-        minVolume: filter.minVolume, distHighMax: filter.distHighMax,
-        minScore: filter.minScore,
-      });
+      const result = await scanBullPick(
+        {
+          minPrice: filter.minPrice, maxPrice: filter.maxPrice,
+          minVolume: filter.minVolume, distHighMax: filter.distHighMax,
+          minScore: filter.minScore,
+        },
+        (done, total) => setProgress({ done, total }),
+      );
       setStocks(result.stocks ?? []);
       setMarket(result.market ?? null);
       setScannedAt(result.scannedAt);
@@ -102,6 +107,14 @@ export default function Dashboard() {
       {loading && (
         <div style={{ color: c.textSecondary, fontSize: 14, fontStyle: 'italic', lineHeight: 1.6 }}>
           正在從 TWSE / TPEx 抓取上市櫃股票清單，逐一分析中，請耐心等待...
+          {progress.total > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ background: c.border, borderRadius: 4, height: 6, overflow: 'hidden', maxWidth: 400 }}>
+                <div style={{ background: c.blue, height: '100%', width: `${(progress.done / progress.total) * 100}%`, transition: 'width 0.3s' }} />
+              </div>
+              <span style={{ fontSize: 12, color: c.textMuted }}>{progress.done} / {progress.total}</span>
+            </div>
+          )}
         </div>
       )}
 

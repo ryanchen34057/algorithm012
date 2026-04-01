@@ -234,9 +234,9 @@ export interface ElitePickAnalysis {
 
 export interface MarketStatus {
   indexPrice: number;
+  ma20: number;
   ma60: number;
   ma120: number;
-  ma20: number;
   trend: MarketTrendType;
   trendLabel: string;
 }
@@ -303,6 +303,7 @@ export interface BullPickAnalysis {
   industry: string;
   conceptTag: string;
   currentPrice: number;
+  changePct: number;
   pattern: PatternShapeType;
   patternLabel: string;
   maAligned: boolean;
