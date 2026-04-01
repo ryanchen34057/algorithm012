@@ -11,6 +11,7 @@ import IndustryHeatmap from '../components/IndustryHeatmap';
 import ElitePickRow from '../components/ElitePickRow';
 import MAPullbackRow from '../components/MAPullbackRow';
 import BullPickRow from '../components/BullPickRow';
+import { downloadGapCsv, downloadBreakoutCsv, downloadPeakAttackCsv, downloadSuperPerfCsv, downloadElitePickCsv, downloadMAPullbackCsv, downloadBullPickCsv } from '../utils/csvExport';
 
 // ── Scanner Tabs ──
 type ScannerTab = 'gap' | 'breakout' | 'peakattack' | 'superperf' | 'elitepick' | 'mapullback' | 'bullpick';
@@ -453,6 +454,8 @@ function GapResults({ stocks, filter, setFilter, loading, scannedAt, totalScanne
           {filter.direction !== 'all' && (
             <span style={{ color: c.blue }}> → 顯示 {filtered.length} 支（{filter.direction === 'long' ? '做多' : '做空'}）</span>
           )}
+          &nbsp;&nbsp;
+          <DownloadCsvButton count={filtered.length} onDownload={() => downloadGapCsv(filtered)} />
         </div>
       )}
 
@@ -558,6 +561,8 @@ function BreakoutResults({ stocks, loading, scannedAt, totalScanned }: {
               （<span style={{ color: '#a78bfa' }}>W底 {wCount}</span> / <span style={{ color: '#22d3ee' }}>V底 {vCount}</span> / 其他 {stocks.length - wCount - vCount}）
             </span>
           )}
+          &nbsp;&nbsp;
+          <DownloadCsvButton count={stocks.length} onDownload={() => downloadBreakoutCsv(stocks)} />
         </div>
       )}
 
@@ -640,6 +645,8 @@ function PeakAttackResults({ stocks, loading, scannedAt, totalScanned }: {
               （<span style={{ color: c.up }}>已突破 {breakingCount}</span> / 接近突破 {stocks.length - breakingCount}）
             </span>
           )}
+          &nbsp;&nbsp;
+          <DownloadCsvButton count={stocks.length} onDownload={() => downloadPeakAttackCsv(stocks)} />
         </div>
       )}
 
@@ -720,6 +727,8 @@ function MAPullbackResults({ stocks, loading, scannedAt, totalScanned }: {
           {allOKCount > 0 && (
             <span style={{ color: c.up }}>（{allOKCount} 支三線合一）</span>
           )}
+          &nbsp;&nbsp;
+          <DownloadCsvButton count={stocks.length} onDownload={() => downloadMAPullbackCsv(stocks)} />
         </div>
       )}
 
@@ -837,6 +846,8 @@ function ElitePickResults({ stocks, market, loading, scannedAt, totalScanned }: 
           {sellCount > 0 && (
             <span style={{ color: '#ef4444' }}>（{sellCount} 支有出場訊號）</span>
           )}
+          &nbsp;&nbsp;
+          <DownloadCsvButton count={stocks.length} onDownload={() => downloadElitePickCsv(stocks)} />
         </div>
       )}
 
@@ -920,6 +931,8 @@ function SuperPerfResults({ stocks, industries, loading, scannedAt, totalScanned
           {industries.length > 0 && (
             <span style={{ color: c.textMuted }}>（涵蓋 {industries.length} 個產業）</span>
           )}
+          &nbsp;&nbsp;
+          <DownloadCsvButton count={stocks.length} onDownload={() => downloadSuperPerfCsv(stocks)} />
         </div>
       )}
 
@@ -989,6 +1002,8 @@ function BullPickResults({ stocks, market, loading, scannedAt, totalScanned }: {
           掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
           &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
           <strong style={{ color: c.text }}>{stocks.length}</strong> 支強勢精選
+          &nbsp;&nbsp;
+          <DownloadCsvButton count={stocks.length} onDownload={() => downloadBullPickCsv(stocks)} />
         </div>
       )}
 
@@ -1019,6 +1034,21 @@ function EmptyState({ loading, hasResults, scannedAt, emptyMsg }: { loading: boo
       點擊「掃描全市場」開始分析台灣上市櫃股票。<br />
       <span style={{ fontSize: 13 }}>系統會從 TWSE / TPEx 抓取完整股票清單，再逐一分析。</span>
     </div>
+  );
+}
+
+function DownloadCsvButton({ count, onDownload }: { count: number; onDownload: () => void }) {
+  const c = useColors();
+  if (count === 0) return null;
+  return (
+    <button onClick={onDownload} style={{
+      background: 'transparent', border: `1px solid ${c.border}`, borderRadius: 6,
+      padding: '5px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+      color: c.textSecondary, display: 'inline-flex', alignItems: 'center', gap: 6,
+    }}>
+      <span style={{ fontSize: 15 }}>&#8681;</span>
+      下載 CSV（{count} 筆）
+    </button>
   );
 }
 
