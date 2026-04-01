@@ -294,6 +294,53 @@ export interface MAPullbackScanResult {
   scanned: number;
 }
 
+// ── Bull Pick Scanner (強勢精選) ──
+
+export interface BullPickAnalysis {
+  symbol: string;
+  name: string;
+  market: string;
+  industry: string;
+  conceptTag: string;
+  currentPrice: number;
+  pattern: PatternShapeType;
+  patternLabel: string;
+  maAligned: boolean;
+  allTimeHigh: number;
+  allTimeHighDate: string;
+  distHighPct: number;
+  foreignNetBuy: number;
+  trustNetBuy: number;
+  dealerNetBuy: number;
+  totalNetBuy: number;
+  netBuyDays: number;
+  revenue: number;
+  revenueYoY: number;
+  revenueMoM: number;
+  revenueMonth: string;
+  ma20: number;
+  ma60: number;
+  ma120: number;
+  ma200: number;
+  entryPrice: number;
+  stopLoss: number;
+  stopLabel: string;
+  target: number;
+  targetLabel: string;
+  rewardRisk: number;
+  adv20: number;
+  todayVolume: number;
+  score: number;
+}
+
+export interface BullPickScanResult {
+  stocks: BullPickAnalysis[];
+  market: MarketStatus;
+  scannedAt: string;
+  total: number;
+  scanned: number;
+}
+
 export interface PositionResult {
   symbol: string;
   entryPrice: number;

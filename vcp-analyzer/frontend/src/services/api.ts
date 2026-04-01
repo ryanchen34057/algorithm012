@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ScanResult, StockChartData, GapAnalysis, PositionResult, BreakoutScanResult, VolumeCondition, PatternType, PeakAttackScanResult, SuperPerfScanResult, ElitePickScanResult, MAPullbackScanResult } from '../types';
+import { ScanResult, StockChartData, GapAnalysis, PositionResult, BreakoutScanResult, VolumeCondition, PatternType, PeakAttackScanResult, SuperPerfScanResult, ElitePickScanResult, MAPullbackScanResult, BullPickScanResult } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8090';
 
@@ -118,6 +118,23 @@ export const scanMAPullback = (params: MAPullbackScanParams = {}): Promise<MAPul
     if (val !== undefined) p.set(key, String(val));
   }
   return api.get<MAPullbackScanResult>(`/api/mapullback/scan?${p.toString()}`).then(r => r.data);
+};
+
+export interface BullPickScanParams {
+  minPrice?: number;
+  maxPrice?: number;
+  minVolume?: number;
+  distHighMax?: number;
+  minScore?: number;
+  concurrency?: number;
+}
+
+export const scanBullPick = (params: BullPickScanParams = {}): Promise<BullPickScanResult> => {
+  const p = new URLSearchParams();
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined) p.set(key, String(val));
+  }
+  return api.get<BullPickScanResult>(`/api/bullpick/scan?${p.toString()}`).then(r => r.data);
 };
 
 export const scanSuperPerf = (params: SuperPerfScanParams = {}): Promise<SuperPerfScanResult> => {

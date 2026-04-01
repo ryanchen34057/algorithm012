@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { scanGap, scanBreakout, scanPeakAttack, scanSuperPerf, scanElitePick, scanMAPullback, GainPeriod, MarketFilter } from '../services/api';
-import { GapAnalysis, BreakoutAnalysis, PeakAttackAnalysis, SuperPerfAnalysis, IndustryHeat, ElitePickAnalysis, MarketStatus, MAPullbackAnalysis, PatternType, VolumeCondition } from '../types';
+import { scanGap, scanBreakout, scanPeakAttack, scanSuperPerf, scanElitePick, scanMAPullback, scanBullPick, GainPeriod, MarketFilter } from '../services/api';
+import { GapAnalysis, BreakoutAnalysis, PeakAttackAnalysis, SuperPerfAnalysis, IndustryHeat, ElitePickAnalysis, MarketStatus, MAPullbackAnalysis, BullPickAnalysis, PatternType, VolumeCondition } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import StockRow from '../components/StockRow';
@@ -10,9 +10,10 @@ import SuperPerfRow from '../components/SuperPerfRow';
 import IndustryHeatmap from '../components/IndustryHeatmap';
 import ElitePickRow from '../components/ElitePickRow';
 import MAPullbackRow from '../components/MAPullbackRow';
+import BullPickRow from '../components/BullPickRow';
 
 // ── Scanner Tabs ──
-type ScannerTab = 'gap' | 'breakout' | 'peakattack' | 'superperf' | 'elitepick' | 'mapullback';
+type ScannerTab = 'gap' | 'breakout' | 'peakattack' | 'superperf' | 'elitepick' | 'mapullback' | 'bullpick';
 
 // ── Gap Scanner Types ──
 type DirectionFilter = 'all' | 'long' | 'short';
@@ -121,6 +122,20 @@ const MA_PULLBACK_DEFAULTS: MAPullbackFilter = {
   pullbackPct: 3, slopeDays: 5, minScore: 50,
 };
 
+// ── Bull Pick Scanner Types ──
+interface BullPickFilter {
+  minPrice: number;
+  maxPrice: number;
+  minVolume: number;
+  distHighMax: number;
+  minScore: number;
+}
+
+const BULL_PICK_DEFAULTS: BullPickFilter = {
+  minPrice: 15, maxPrice: 9999, minVolume: 300,
+  distHighMax: 10, minScore: 40,
+};
+
 export default function Dashboard() {
   const c = useColors();
   const [tab, setTab] = useState<ScannerTab>('gap');
@@ -150,6 +165,11 @@ export default function Dashboard() {
   // ── MA Pullback state ──
   const [maPullbackStocks, setMaPullbackStocks] = useState<MAPullbackAnalysis[]>([]);
   const [maPullbackFilter, setMaPullbackFilter] = useState<MAPullbackFilter>({ ...MA_PULLBACK_DEFAULTS });
+
+  // ── Bull Pick state ──
+  const [bullPickStocks, setBullPickStocks] = useState<BullPickAnalysis[]>([]);
+  const [bullPickMarket, setBullPickMarket] = useState<MarketStatus | null>(null);
+  const [bullPickFilter, setBullPickFilter] = useState<BullPickFilter>({ ...BULL_PICK_DEFAULTS });
 
   // ── Shared state ──
   const [loading, setLoading] = useState(false);
@@ -217,13 +237,23 @@ export default function Dashboard() {
         setElitePickMarket(result.market ?? null);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
-      } else {
+      } else if (tab === 'mapullback') {
         const result = await scanMAPullback({
           minPrice: maPullbackFilter.minPrice, maxPrice: maPullbackFilter.maxPrice,
           minVolume: maPullbackFilter.minVolume, pullbackPct: maPullbackFilter.pullbackPct,
           slopeDays: maPullbackFilter.slopeDays, minScore: maPullbackFilter.minScore,
         });
         setMaPullbackStocks(result.stocks ?? []);
+        setScannedAt(result.scannedAt);
+        setTotalScanned(result.scanned);
+      } else {
+        const result = await scanBullPick({
+          minPrice: bullPickFilter.minPrice, maxPrice: bullPickFilter.maxPrice,
+          minVolume: bullPickFilter.minVolume, distHighMax: bullPickFilter.distHighMax,
+          minScore: bullPickFilter.minScore,
+        });
+        setBullPickStocks(result.stocks ?? []);
+        setBullPickMarket(result.market ?? null);
         setScannedAt(result.scannedAt);
         setTotalScanned(result.scanned);
       }
@@ -241,7 +271,8 @@ export default function Dashboard() {
     else if (tab === 'peakattack') setPeakAttackFilter({ ...PEAK_ATTACK_DEFAULTS });
     else if (tab === 'superperf') setSuperPerfFilter({ ...SUPERPERF_DEFAULTS });
     else if (tab === 'elitepick') setElitePickFilter({ ...ELITE_PICK_DEFAULTS });
-    else setMaPullbackFilter({ ...MA_PULLBACK_DEFAULTS });
+    else if (tab === 'mapullback') setMaPullbackFilter({ ...MA_PULLBACK_DEFAULTS });
+    else setBullPickFilter({ ...BULL_PICK_DEFAULTS });
   };
 
   return (
@@ -251,7 +282,7 @@ export default function Dashboard() {
         <div>
           <h1 style={{ ...S.title, color: c.text }}>台股智慧掃描系統</h1>
           <p style={{ ...S.subtitle, color: c.textMuted }}>
-            震撼跳空 · 突破前高 · 攻頂突破 · 超級績效 · 精選突破 · 均線回踩
+            震撼跳空 · 突破前高 · 攻頂突破 · 超級績效 · 精選突破 · 均線回踩 · 強勢精選
           </p>
         </div>
         <ThemeToggle />
@@ -259,7 +290,7 @@ export default function Dashboard() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, background: c.bgCard, borderRadius: 8, padding: 4, border: `1px solid ${c.border}` }}>
-        {([['gap', '震撼跳空'], ['breakout', '突破前高'], ['peakattack', '攻頂突破'], ['superperf', '超級績效'], ['elitepick', '精選突破'], ['mapullback', '均線回踩']] as const).map(([key, label]) => (
+        {([['gap', '震撼跳空'], ['breakout', '突破前高'], ['peakattack', '攻頂突破'], ['superperf', '超級績效'], ['elitepick', '精選突破'], ['mapullback', '均線回踩'], ['bullpick', '強勢精選']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -295,6 +326,9 @@ export default function Dashboard() {
       {tab === 'mapullback' && (
         <MAPullbackFilterBar filter={maPullbackFilter} setFilter={setMaPullbackFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
       )}
+      {tab === 'bullpick' && (
+        <BullPickFilterBar filter={bullPickFilter} setFilter={setBullPickFilter} loading={loading} onScan={handleScan} onReset={handleReset} />
+      )}
 
       {/* Error */}
       {error && (
@@ -326,6 +360,9 @@ export default function Dashboard() {
       )}
       {tab === 'mapullback' && (
         <MAPullbackResults stocks={maPullbackStocks} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
+      )}
+      {tab === 'bullpick' && (
+        <BullPickResults stocks={bullPickStocks} market={bullPickMarket} loading={loading} scannedAt={scannedAt} totalScanned={totalScanned} />
       )}
     </div>
   );
@@ -894,6 +931,72 @@ function SuperPerfResults({ stocks, industries, loading, scannedAt, totalScanned
       </div>
 
       <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合超級績效條件的股票。" />
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BULL PICK SCANNER (強勢精選)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function BullPickFilterBar({ filter, setFilter, loading, onScan, onReset }: {
+  filter: BullPickFilter; setFilter: React.Dispatch<React.SetStateAction<BullPickFilter>>;
+  loading: boolean; onScan: () => void; onReset: () => void;
+}) {
+  const c = useColors();
+  return (
+    <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
+      <div style={S.filterGroup}>
+        <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>價格 & 成交量</span>
+        <div style={S.filterGroupInputs}>
+          <FilterInput label="最低股價（元）" value={filter.minPrice} onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))} hint="建議 15+" />
+          <FilterInput label="最高股價（元）" value={filter.maxPrice} onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))} hint="不限" />
+          <FilterInput label="最低日均量（張）" value={filter.minVolume} onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))} hint="ADV20, 建議 300+" />
+        </div>
+      </div>
+      <div style={S.filterGroup}>
+        <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>篩選條件</span>
+        <div style={S.filterGroupInputs}>
+          <FilterInput label="距歷史高點上限（%）" value={filter.distHighMax} onChange={(v) => setFilter((f) => ({ ...f, distHighMax: v }))} hint="建議 10" />
+          <FilterInput label="最低分數" value={filter.minScore} onChange={(v) => setFilter((f) => ({ ...f, minScore: v }))} hint="0-100, 建議 40" />
+        </div>
+      </div>
+      <ScanActions loading={loading} onScan={onScan} onReset={onReset} />
+    </div>
+  );
+}
+
+function BullPickResults({ stocks, market, loading, scannedAt, totalScanned }: {
+  stocks: BullPickAnalysis[]; market: MarketStatus | null;
+  loading: boolean; scannedAt: string; totalScanned: number;
+}) {
+  const c = useColors();
+  return (
+    <>
+      {market && (
+        <div style={{
+          background: market.trend === 'bull' ? '#16a34a15' : market.trend === 'bear' ? '#ef444415' : c.bgCard,
+          border: `1px solid ${market.trend === 'bull' ? '#16a34a33' : market.trend === 'bear' ? '#ef444433' : c.border}`,
+          borderRadius: 8, padding: '10px 16px', fontSize: 13,
+          color: market.trend === 'bull' ? '#16a34a' : market.trend === 'bear' ? '#ef4444' : c.textSecondary,
+        }}>
+          大盤趨勢：{market.trendLabel} &nbsp;（加權指數 {market.indexPrice} · MA20 {market.ma20} · MA60 {market.ma60}）
+        </div>
+      )}
+
+      {scannedAt && !loading && (
+        <div style={{ color: c.textDim, fontSize: 13 }}>
+          掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
+          &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
+          <strong style={{ color: c.text }}>{stocks.length}</strong> 支強勢精選
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {stocks.map((s) => <BullPickRow key={s.symbol} stock={s} />)}
+      </div>
+
+      <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合強勢精選條件的股票。" />
     </>
   );
 }
