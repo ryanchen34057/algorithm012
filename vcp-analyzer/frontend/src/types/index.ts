@@ -340,6 +340,7 @@ export interface BullPickScanResult {
   scannedAt: string;
   total: number;
   scanned: number;
+  latestDate?: string;
 }
 
 export interface PositionResult {

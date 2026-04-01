@@ -34,6 +34,7 @@ export default function Dashboard() {
   const [scannedAt, setScannedAt] = useState('');
   const [totalScanned, setTotalScanned] = useState(0);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [latestDate, setLatestDate] = useState('');
 
   // ── Handlers ──
   const handleScan = async () => {
@@ -53,6 +54,7 @@ export default function Dashboard() {
       setMarket(result.market ?? null);
       setScannedAt(result.scannedAt);
       setTotalScanned(result.scanned);
+      setLatestDate(result.latestDate ?? '');
     } catch (e: unknown) {
       setError('掃描失敗：無法連線到後端伺服器，請確認後端是否已啟動');
       console.error(e);
@@ -134,6 +136,7 @@ export default function Dashboard() {
       {scannedAt && !loading && (
         <div style={{ color: c.textDim, fontSize: 13 }}>
           掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
+          {latestDate && <>&nbsp;·&nbsp;資料日期：<strong style={{ color: c.text }}>{latestDate}</strong></>}
           &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
           <strong style={{ color: c.text }}>{stocks.length}</strong> 支強勢精選
           &nbsp;&nbsp;

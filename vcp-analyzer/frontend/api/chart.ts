@@ -12,7 +12,7 @@ export default async function handler(req: any, res: any) {
   const end = Math.floor(Date.now() / 1000) + 86400;
   const start = end - 2 * 365 * 86400;
 
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${start}&period2=${end}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${start}&period2=${end}&includePrePost=false&events=div`;
 
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA } });

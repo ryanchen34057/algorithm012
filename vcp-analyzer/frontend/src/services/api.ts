@@ -134,12 +134,13 @@ export async function scanBullPick(
   if (stockListRes.debug) {
     console.log('[scanner] stock list debug:', stockListRes.debug);
   }
-  console.log(`[scanner] ${total} stocks loaded (TWSE+TPEx), institution: ${Object.keys(instMap).length}`);
+  console.log(`[scanner] ${total} stocks loaded (TWSE+TPEx), institution: ${Object.keys(instMap).length}`, stockListRes.debug);
 
   // Step 2: Fetch charts in batches and analyze
   const BATCH_SIZE = 8;
   const results: BullPickAnalysis[] = [];
   let done = 0;
+  let latestDate = '';
 
   for (let i = 0; i < stocks.length; i += BATCH_SIZE) {
     const batch = stocks.slice(i, i + BATCH_SIZE);
@@ -151,6 +152,10 @@ export async function scanBullPick(
       const chartData = charts[j];
 
       if (chartData?.candles) {
+        // Track the latest candle date across all stocks
+        const lastCandle = chartData.candles[chartData.candles.length - 1];
+        if (lastCandle && lastCandle.date > latestDate) latestDate = lastCandle.date;
+
         const inst = instMap[s.symbol];
         const result = analyze(
           s.symbol,
@@ -198,12 +203,15 @@ export async function scanBullPick(
   // For simplicity, we just re-sort
   results.sort((a, b) => b.score - a.score);
 
+  console.log(`[scanner] latest candle date: ${latestDate}, matched: ${results.length}/${total}`);
+
   return {
     stocks: results,
     market: market ?? { indexPrice: 0, ma20: 0, ma60: 0, ma120: 0, trend: 'neutral', trendLabel: '無資料' },
     scannedAt: new Date().toISOString(),
     total: results.length,
     scanned: total,
+    latestDate,
   };
 }
 
