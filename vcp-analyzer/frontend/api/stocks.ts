@@ -38,6 +38,8 @@ export default async function handler(req: any, res: any) {
 }
 
 async function fetchTWSE(minPrice: number, minVolLots: number, debug: string[]): Promise<StockInfo[]> {
+  // URL 1: opendata API → returns array of objects [{Code, Name, ClosingPrice, TradeVolume, ...}]
+  // URL 2: rwd API → returns {fields: [...], data: [["0050","元大台灣50",...], ...]}
   const urls = [
     'https://opendata.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL',
     'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL?response=json',
@@ -56,28 +58,77 @@ async function fetchTWSE(minPrice: number, minVolLots: number, debug: string[]):
       debug.push(`TWSE ${url} → HTTP ${r.status}`);
       if (!r.ok) continue;
       const body = await r.json();
-      let rows = Array.isArray(body) ? body : body?.data;
-      if (!Array.isArray(rows)) {
-        debug.push(`TWSE response not array, keys: ${Object.keys(body).join(',')}`);
-        continue;
+
+      // Format 1: Array of objects (opendata API)
+      if (Array.isArray(body) && body.length > 0 && typeof body[0] === 'object' && !Array.isArray(body[0])) {
+        debug.push(`TWSE format: object array, rows: ${body.length}`);
+        const result = body
+          .filter((r: any) => {
+            const code = r.Code ?? r['證券代號'] ?? '';
+            if (!/^\d{4}$/.test(code)) return false;
+            const price = parseNum(r.ClosingPrice ?? r['收盤價'] ?? '0');
+            if (price < minPrice) return false;
+            const vol = parseNum(r.TradeVolume ?? r['成交股數'] ?? '0') / 1000;
+            return vol >= minVolLots;
+          })
+          .map((r: any) => ({
+            symbol: (r.Code ?? r['證券代號']) + '.TW',
+            name: r.Name ?? r['證券名稱'] ?? '',
+          }));
+        if (result.length > 0) return result;
       }
-      debug.push(`TWSE raw rows: ${rows.length}`);
 
-      const result = rows
-        .filter((r: any) => {
-          const code = r.Code ?? r['證券代號'] ?? '';
-          if (!/^\d{4}$/.test(code)) return false;
-          const price = parseNum(r.ClosingPrice ?? r['收盤價'] ?? '0');
-          if (price < minPrice) return false;
-          const vol = parseNum(r.TradeVolume ?? r['成交股數'] ?? '0') / 1000;
-          return vol >= minVolLots;
-        })
-        .map((r: any) => ({
-          symbol: (r.Code ?? r['證券代號']) + '.TW',
-          name: r.Name ?? r['證券名稱'] ?? '',
-        }));
+      // Format 2: {fields: [...], data: [[...], ...]} (rwd API)
+      if (body.fields && Array.isArray(body.data)) {
+        debug.push(`TWSE format: fields+data, fields: [${body.fields.slice(0, 5).join(',')}], rows: ${body.data.length}`);
+        const fields: string[] = body.fields.map((f: string) => f.trim());
+        const codeIdx = fields.findIndex((f: string) => f.includes('證券代號'));
+        const nameIdx = fields.findIndex((f: string) => f.includes('證券名稱'));
+        const priceIdx = fields.findIndex((f: string) => f.includes('收盤價'));
+        const volIdx = fields.findIndex((f: string) => f.includes('成交股數') || f.includes('成交量'));
 
-      if (result.length > 0) return result;
+        debug.push(`TWSE indices: code=${codeIdx}, name=${nameIdx}, price=${priceIdx}, vol=${volIdx}`);
+
+        if (codeIdx < 0) continue;
+
+        const result: StockInfo[] = [];
+        for (const row of body.data) {
+          if (!Array.isArray(row) || row.length <= codeIdx) continue;
+          const code = String(row[codeIdx]).trim();
+          if (!/^\d{4}$/.test(code)) continue;
+          const price = priceIdx >= 0 ? parseNum(String(row[priceIdx])) : 0;
+          if (price < minPrice) continue;
+          const vol = volIdx >= 0 ? parseNum(String(row[volIdx])) / 1000 : 0;
+          if (vol < minVolLots) continue;
+          result.push({
+            symbol: code + '.TW',
+            name: nameIdx >= 0 ? String(row[nameIdx]).trim() : '',
+          });
+        }
+        debug.push(`TWSE filtered: ${result.length}`);
+        if (result.length > 0) return result;
+      }
+
+      // Format 3: {data: [{...}, ...]} wrapper
+      if (body.data && Array.isArray(body.data) && body.data.length > 0 && typeof body.data[0] === 'object' && !Array.isArray(body.data[0])) {
+        debug.push(`TWSE format: data wrapper, rows: ${body.data.length}`);
+        const result = body.data
+          .filter((r: any) => {
+            const code = r.Code ?? r['證券代號'] ?? '';
+            if (!/^\d{4}$/.test(code)) return false;
+            const price = parseNum(r.ClosingPrice ?? r['收盤價'] ?? '0');
+            if (price < minPrice) return false;
+            const vol = parseNum(r.TradeVolume ?? r['成交股數'] ?? '0') / 1000;
+            return vol >= minVolLots;
+          })
+          .map((r: any) => ({
+            symbol: (r.Code ?? r['證券代號']) + '.TW',
+            name: r.Name ?? r['證券名稱'] ?? '',
+          }));
+        if (result.length > 0) return result;
+      }
+
+      debug.push(`TWSE: unrecognized format, keys: ${Object.keys(body).join(',')}`);
     } catch (e) {
       debug.push(`TWSE ${url} error: ${e}`);
       continue;
