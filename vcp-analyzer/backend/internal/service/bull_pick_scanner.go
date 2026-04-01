@@ -38,6 +38,11 @@ type BullPickScanner struct {
 	institutionMap map[string]*InstitutionData // symbol → data
 	revenueMap     map[string]*RevenueData     // stockCode (e.g. "2330") → data
 	lastFetchDate  string
+
+	// Yahoo Finance crumb authentication
+	crumbMu    sync.Mutex
+	yahooCrumb string
+	yahooCookie string
 }
 
 type InstitutionData struct {
@@ -275,9 +280,72 @@ type yahooQuoteSummary struct {
 }
 
 func (s *BullPickScanner) fetchRevenueData(client *http.Client) {
-	// 年營收從 Yahoo Finance 抓，在 Analyze 裡逐檔抓取（因為每支股票要個別 call）
-	// 這裡不需要批次抓，改為 lazy fetch per stock
-	log.Printf("[bullpick] Revenue will be fetched per-stock from Yahoo Finance")
+	// 先取得 Yahoo Finance crumb（一次性）
+	s.fetchYahooCrumb(client)
+	if s.yahooCrumb != "" {
+		log.Printf("[bullpick] Yahoo crumb obtained, revenue per-stock fetch enabled")
+	} else {
+		log.Printf("[bullpick] WARNING: failed to get Yahoo crumb, revenue data will be unavailable")
+	}
+}
+
+// fetchYahooCrumb obtains a crumb token required for Yahoo Finance v10 API
+func (s *BullPickScanner) fetchYahooCrumb(client *http.Client) {
+	s.crumbMu.Lock()
+	defer s.crumbMu.Unlock()
+
+	if s.yahooCrumb != "" {
+		return // already fetched
+	}
+
+	// Step 1: GET https://fc.yahoo.com to get cookies
+	req, _ := http.NewRequest("GET", "https://fc.yahoo.com", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[bullpick] crumb step1 failed: %v", err)
+		return
+	}
+	resp.Body.Close()
+
+	// Extract cookies
+	cookies := ""
+	for _, c := range resp.Cookies() {
+		if cookies != "" {
+			cookies += "; "
+		}
+		cookies += c.Name + "=" + c.Value
+	}
+
+	if cookies == "" {
+		log.Printf("[bullpick] crumb: no cookies from fc.yahoo.com")
+		return
+	}
+
+	// Step 2: GET crumb using cookies
+	req2, _ := http.NewRequest("GET", "https://query2.finance.yahoo.com/v1/test/getcrumb", nil)
+	req2.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req2.Header.Set("Cookie", cookies)
+
+	resp2, err := client.Do(req2)
+	if err != nil {
+		log.Printf("[bullpick] crumb step2 failed: %v", err)
+		return
+	}
+	defer resp2.Body.Close()
+
+	body, _ := io.ReadAll(resp2.Body)
+	crumb := strings.TrimSpace(string(body))
+
+	if crumb == "" || strings.Contains(crumb, "<") {
+		log.Printf("[bullpick] crumb: invalid response: %s", string(body[:min(len(body), 100)]))
+		return
+	}
+
+	s.yahooCrumb = crumb
+	s.yahooCookie = cookies
+	log.Printf("[bullpick] Yahoo crumb OK (len=%d)", len(crumb))
 }
 
 // FetchStockRevenue fetches annual revenue for a single stock from Yahoo Finance
@@ -292,23 +360,41 @@ func (s *BullPickScanner) FetchStockRevenue(client *http.Client, symbol string) 
 	}
 	s.mu.RUnlock()
 
-	// Fetch from Yahoo Finance v10 quoteSummary
+	s.crumbMu.Lock()
+	crumb := s.yahooCrumb
+	cookie := s.yahooCookie
+	s.crumbMu.Unlock()
+
+	if crumb == "" {
+		return nil
+	}
+
+	// Fetch from Yahoo Finance v10 quoteSummary with crumb
 	url := fmt.Sprintf(
-		"https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=incomeStatementHistory,financialData",
-		symbol,
+		"https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=incomeStatementHistory,financialData&crumb=%s",
+		symbol, crumb,
 	)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Cookie", cookie)
 
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		// Crumb might be expired — log it once
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			log.Printf("[bullpick] revenue %s: HTTP %d (crumb expired?)", symbol, resp.StatusCode)
+		}
+		return nil
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
