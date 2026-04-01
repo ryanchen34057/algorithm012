@@ -249,84 +249,119 @@ func (s *BullPickScanner) fetchTPExInstitution(client *http.Client, date time.Ti
 // ── 月營收 ──
 
 func (s *BullPickScanner) fetchRevenueData(client *http.Client) {
-	// 公開資訊觀測站 - 月營收 (try last 2 months)
 	now := time.Now()
+
+	// 營收公布時間：每月10日前公布上月營收，所以嘗試最近3個月
 	for offset := 1; offset <= 3; offset++ {
 		d := now.AddDate(0, -offset, 0)
-		year := d.Year() - 1911 // ROC year
+		rocYear := d.Year() - 1911
 		month := int(d.Month())
 		monthStr := fmt.Sprintf("%d-%02d", d.Year(), d.Month())
 
-		// TWSE (上市) 月營收
-		twseCount := s.fetchTWSERevenue(client, year, month, monthStr)
-		// TPEx (上櫃) 月營收
-		tpexCount := s.fetchTPExRevenue(client, year, month, monthStr)
+		total := 0
 
-		if twseCount > 0 || tpexCount > 0 {
-			log.Printf("[bullpick] Revenue data (%s): TWSE=%d TPEx=%d", monthStr, twseCount, tpexCount)
+		// 來源1: TWSE opendata（上市月營收）
+		twseCount := s.fetchRevenueFromOpenData(
+			client,
+			"https://opendata.twse.com.tw/v1/opendata/t187ap05_L",
+			"TWSE", monthStr,
+		)
+		total += twseCount
+
+		// 來源2: TPEx opendata（上櫃月營收）
+		tpexCount := s.fetchRevenueFromOpenData(
+			client,
+			"https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O",
+			"TPEx", monthStr,
+		)
+		total += tpexCount
+
+		// 來源3: MOPS 公開資訊觀測站 — 上市
+		if twseCount == 0 {
+			mopsCount := s.fetchRevenueFromMOPS(client, rocYear, month, "sii", monthStr)
+			total += mopsCount
+		}
+
+		// 來源4: MOPS 公開資訊觀測站 — 上櫃
+		if tpexCount == 0 {
+			mopsCount := s.fetchRevenueFromMOPS(client, rocYear, month, "otc", monthStr)
+			total += mopsCount
+		}
+
+		if total > 0 {
+			log.Printf("[bullpick] Revenue data (%s): %d stocks loaded", monthStr, total)
 			return
 		}
+		log.Printf("[bullpick] Revenue offset=%d (%s) — no data, trying previous month", offset, monthStr)
 	}
-	log.Printf("[bullpick] failed to fetch revenue data")
+	log.Printf("[bullpick] WARNING: failed to fetch revenue data from all sources")
 }
 
-func (s *BullPickScanner) fetchTWSERevenue(client *http.Client, rocYear, month int, monthStr string) int {
-	// 公開資訊觀測站 API
-	url := fmt.Sprintf(
-		"https://mops.twse.com.tw/nas/t21/sii/t21sc03_%d_%d_0.html",
-		rocYear, month,
-	)
-
+func (s *BullPickScanner) fetchRevenueFromOpenData(client *http.Client, url, source, monthStr string) int {
 	body, err := getJSON(client, url)
 	if err != nil {
-		// Try alternative: opendata API
-		url2 := "https://opendata.twse.com.tw/v1/opendata/t187ap05_L"
-		body, err = getJSON(client, url2)
-		if err != nil {
-			return 0
-		}
-		return s.parseOpenDataRevenue(body, ".TW", monthStr)
-	}
-	// HTML parsing is complex; try opendata instead
-	url2 := "https://opendata.twse.com.tw/v1/opendata/t187ap05_L"
-	body2, err2 := getJSON(client, url2)
-	if err2 != nil {
+		log.Printf("[bullpick] %s revenue fetch failed: %v", source, err)
 		return 0
 	}
-	return s.parseOpenDataRevenue(body2, ".TW", monthStr)
-}
 
-func (s *BullPickScanner) fetchTPExRevenue(client *http.Client, rocYear, month int, monthStr string) int {
-	// TPEx opendata for revenue
-	url := "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O"
-	body, err := getJSON(client, url)
-	if err != nil {
-		return 0
-	}
-	return s.parseOpenDataRevenue(body, ".TWO", monthStr)
-}
-
-func (s *BullPickScanner) parseOpenDataRevenue(body []byte, suffix, monthStr string) int {
-	// Try various field name patterns
+	// 嘗試解析為 []map[string]string
 	var rows []map[string]string
 	if err := json.Unmarshal(body, &rows); err != nil {
+		log.Printf("[bullpick] %s revenue parse failed: %v", source, err)
+		// Debug: 印出前 200 字看格式
+		preview := string(body)
+		if len(preview) > 200 {
+			preview = preview[:200]
+		}
+		log.Printf("[bullpick] %s response preview: %s", source, preview)
 		return 0
 	}
+
+	if len(rows) == 0 {
+		log.Printf("[bullpick] %s revenue: empty array", source)
+		return 0
+	}
+
+	// Debug: 列出第一行的所有欄位名稱
+	firstRow := rows[0]
+	keys := make([]string, 0, len(firstRow))
+	for k := range firstRow {
+		keys = append(keys, k)
+	}
+	log.Printf("[bullpick] %s revenue fields: %v (total rows: %d)", source, keys, len(rows))
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	count := 0
 	for _, row := range rows {
-		code := findField(row, "公司代號", "SecuritiesCompanyCode", "Code", "code")
-		if code == "" || !is4DigitCode(strings.TrimSpace(code)) {
+		code := findField(row,
+			"公司代號", "公司 代號", "SecuritiesCompanyCode", "Code", "code",
+			"公司代碼", "股票代號",
+		)
+		if code == "" {
 			continue
 		}
 		code = strings.TrimSpace(code)
+		if !is4DigitCode(code) {
+			continue
+		}
 
-		revStr := findField(row, "當月營收", "營業收入", "Revenue", "revenue", "當月營收淨額")
-		yoyStr := findField(row, "去年同月增減(%)", "營收年增率", "YoY", "去年同月增減")
-		momStr := findField(row, "上月比較增減(%)", "營收月增率", "MoM", "上月比較增減")
+		revStr := findField(row,
+			"當月營收", "營業收入-當月營收", "當月營收淨額",
+			"營業收入", "Revenue", "revenue",
+			"營收", "當月營收(千元)",
+		)
+		yoyStr := findField(row,
+			"去年同月增減(%)", "去年同月增減", "營收年增率",
+			"去年同月增減(％)", "去年同期增減(%)", "YoY",
+			"去年同月增減百分比",
+		)
+		momStr := findField(row,
+			"上月比較增減(%)", "上月比較增減", "營收月增率",
+			"上月比較增減(％)", "上月增減(%)", "MoM",
+			"上月比較增減百分比",
+		)
 
 		rev := parseNumber(revStr)
 		yoy := parseNumber(yoyStr)
@@ -344,7 +379,133 @@ func (s *BullPickScanner) parseOpenDataRevenue(body []byte, suffix, monthStr str
 		}
 		count++
 	}
+
+	if count > 0 {
+		log.Printf("[bullpick] %s revenue: loaded %d stocks", source, count)
+	} else if len(rows) > 0 {
+		// Debug: 有資料但沒解析到，印出第一行完整內容
+		sample, _ := json.Marshal(rows[0])
+		log.Printf("[bullpick] %s revenue: %d rows but 0 parsed. Sample row: %s", source, len(rows), string(sample))
+	}
 	return count
+}
+
+// fetchRevenueFromMOPS 從公開資訊觀測站 MOPS 抓取月營收
+// typek: "sii" = 上市, "otc" = 上櫃
+func (s *BullPickScanner) fetchRevenueFromMOPS(client *http.Client, rocYear, month int, typek, monthStr string) int {
+	// MOPS POST API
+	url := "https://mops.twse.com.tw/nas/t21/" + typek + "/t21sc03_" +
+		strconv.Itoa(rocYear) + "_" + strconv.Itoa(month) + "_0.html"
+
+	body, err := getJSON(client, url)
+	if err != nil {
+		log.Printf("[bullpick] MOPS %s revenue fetch failed: %v", typek, err)
+		return 0
+	}
+
+	// MOPS 回傳的是 HTML table，解析 <td> 內容
+	content := string(body)
+	if !strings.Contains(content, "<table") && !strings.Contains(content, "<TABLE") {
+		// 可能是 JSON 格式的回傳
+		return s.fetchRevenueFromOpenData(client, url, "MOPS-"+typek, monthStr)
+	}
+
+	return s.parseMOPSRevenueHTML(content, monthStr)
+}
+
+// parseMOPSRevenueHTML 解析 MOPS HTML 格式的營收表
+func (s *BullPickScanner) parseMOPSRevenueHTML(html, monthStr string) int {
+	// MOPS HTML 格式：每一行有多個 <td>
+	// 欄位順序大致: 公司代號, 公司名稱, 當月營收, 上月營收, 去年當月營收,
+	//              上月比較增減(%), 去年同月增減(%)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	count := 0
+	// 簡易 HTML 解析：找 <tr> 裡的 <td>
+	rows := strings.Split(html, "</tr>")
+	for _, row := range rows {
+		tds := extractTDs(row)
+		if len(tds) < 7 {
+			continue
+		}
+		code := strings.TrimSpace(tds[0])
+		if !is4DigitCode(code) {
+			continue
+		}
+
+		rev := parseNumber(tds[2])  // 當月營收
+		mom := parseNumber(tds[5])  // 上月比較增減(%)
+		yoy := parseNumber(tds[6])  // 去年同月增減(%)
+
+		if rev <= 0 {
+			continue
+		}
+
+		s.revenueMap[code] = &RevenueData{
+			Revenue:      rev,
+			RevenueYoY:   yoy,
+			RevenueMoM:   mom,
+			RevenueMonth: monthStr,
+		}
+		count++
+	}
+
+	if count > 0 {
+		log.Printf("[bullpick] MOPS HTML: loaded %d stocks", count)
+	}
+	return count
+}
+
+// extractTDs extracts text content from <td>...</td> tags in an HTML row
+func extractTDs(row string) []string {
+	var result []string
+	remaining := row
+	for {
+		start := strings.Index(remaining, "<td")
+		if start < 0 {
+			// Also try uppercase
+			start = strings.Index(remaining, "<TD")
+			if start < 0 {
+				break
+			}
+		}
+		// Find end of opening tag
+		closeTag := strings.Index(remaining[start:], ">")
+		if closeTag < 0 {
+			break
+		}
+		contentStart := start + closeTag + 1
+		// Find closing </td>
+		endTD := strings.Index(strings.ToLower(remaining[contentStart:]), "</td>")
+		if endTD < 0 {
+			break
+		}
+		content := remaining[contentStart : contentStart+endTD]
+		// Strip any inner HTML tags
+		content = stripHTMLTags(content)
+		content = strings.TrimSpace(content)
+		result = append(result, content)
+		remaining = remaining[contentStart+endTD+5:]
+	}
+	return result
+}
+
+// stripHTMLTags removes HTML tags from a string
+func stripHTMLTags(s string) string {
+	var result strings.Builder
+	inTag := false
+	for _, c := range s {
+		if c == '<' {
+			inTag = true
+		} else if c == '>' {
+			inTag = false
+		} else if !inTag {
+			result.WriteRune(c)
+		}
+	}
+	return result.String()
 }
 
 func findField(m map[string]string, keys ...string) string {
