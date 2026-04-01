@@ -421,6 +421,11 @@ func (s *BullPickScanner) Analyze(chart *model.StockChartData, params BullPickSc
 		distHighPct = (allTimeHigh - price) / allTimeHigh * 100
 	}
 
+	// 硬篩：距歷史高點必須在上限內
+	if distHighPct > params.DistHighMax {
+		return nil
+	}
+
 	// ── 3. Institutional Data ──
 	s.mu.RLock()
 	inst := s.institutionMap[chart.Symbol]
