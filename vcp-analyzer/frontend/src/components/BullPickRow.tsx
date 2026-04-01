@@ -44,7 +44,7 @@ export default function BullPickRow({ stock }: Props) {
             background: market === '櫃' ? '#8b5cf622' : '#3b82f622',
             color: market === '櫃' ? '#8b5cf6' : '#3b82f6',
           }}>{market === '櫃' ? '上櫃' : '上市'}</span>
-          <span style={{ fontWeight: 800, fontSize: 20, color: c.text }}>{code}</span>
+          <span style={{ fontWeight: 800, fontSize: 22, color: c.text, letterSpacing: '0.02em' }}>{code}</span>
           <span style={{ color: c.textSecondary, fontSize: 15 }}>{stock.name}</span>
           {stock.industry && (
             <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3, background: c.blue + '15', color: c.blue }}>
@@ -56,15 +56,22 @@ export default function BullPickRow({ stock }: Props) {
               {stock.conceptTag}
             </span>
           )}
-          <span style={{ color: c.text, fontSize: 17, fontWeight: 700 }}>{stock.currentPrice}</span>
-          <span style={{
-            fontSize: 13, fontWeight: 700,
-            color: stock.changePct > 0 ? c.up : stock.changePct < 0 ? c.down : c.textMuted,
-          }}>
-            {stock.changePct > 0 ? '+' : ''}{stock.changePct}%
-          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ textAlign: 'right' }}>
+            <span style={{
+              fontSize: 22, fontWeight: 800, letterSpacing: '-0.01em',
+              color: stock.changePct > 0 ? c.up : stock.changePct < 0 ? c.down : c.text,
+            }}>{stock.currentPrice}</span>
+            <span style={{
+              fontSize: 13, fontWeight: 700, marginLeft: 6,
+              padding: '2px 6px', borderRadius: 4,
+              background: stock.changePct > 0 ? c.up + '18' : stock.changePct < 0 ? c.down + '18' : c.textMuted + '18',
+              color: stock.changePct > 0 ? c.up : stock.changePct < 0 ? c.down : c.textMuted,
+            }}>
+              {stock.changePct > 0 ? '+' : ''}{stock.changePct}%
+            </span>
+          </div>
           {stock.pattern !== 'none' && (
             <span style={{
               fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
