@@ -1,6 +1,4 @@
 // Vercel Serverless Function: Fetch stock list from TWSE + TPEx
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
 interface StockInfo {
@@ -8,7 +6,7 @@ interface StockInfo {
   name: string;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(204).end();
 

@@ -1,42 +1,30 @@
 // Vercel Serverless Function: Proxy Yahoo Finance quoteSummary for revenue data
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
-// Cache crumb in-memory (persists for the lifetime of the serverless function instance)
 let cachedCrumb = '';
 let cachedCookie = '';
 
 async function fetchCrumb(): Promise<void> {
   if (cachedCrumb) return;
 
-  // Step 1: GET fc.yahoo.com for cookies
   const r1 = await fetch('https://fc.yahoo.com', {
     headers: { 'User-Agent': UA },
     redirect: 'manual',
   });
 
   const cookies: string[] = [];
-  const setCookies = r1.headers.getSetCookie?.() ?? [];
-  for (const sc of setCookies) {
-    const parts = sc.split(';')[0];
-    if (parts) cookies.push(parts);
-  }
-  // Fallback: try raw header
-  if (cookies.length === 0) {
-    const raw = r1.headers.get('set-cookie');
-    if (raw) {
-      for (const part of raw.split(',')) {
-        const kv = part.split(';')[0].trim();
-        if (kv.includes('=')) cookies.push(kv);
-      }
+  // Try getSetCookie first (Node 18.15+), then fallback
+  const rawSetCookie = r1.headers.get('set-cookie') ?? '';
+  if (rawSetCookie) {
+    for (const part of rawSetCookie.split(/,(?=[^ ])/)) {
+      const kv = part.split(';')[0].trim();
+      if (kv.includes('=')) cookies.push(kv);
     }
   }
 
   cachedCookie = cookies.join('; ');
   if (!cachedCookie) return;
 
-  // Step 2: GET crumb using cookies
   const r2 = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
     headers: { 'User-Agent': UA, Cookie: cachedCookie },
   });
@@ -46,7 +34,7 @@ async function fetchCrumb(): Promise<void> {
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(204).end();
 
@@ -67,7 +55,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (r.status === 401 || r.status === 403) {
-      // Reset crumb for next call
       cachedCrumb = '';
       cachedCookie = '';
       return res.json({ revenue: null, error: 'crumb_expired' });

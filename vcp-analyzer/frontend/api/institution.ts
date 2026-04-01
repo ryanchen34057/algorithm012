@@ -1,9 +1,7 @@
 // Vercel Serverless Function: Proxy TWSE/TPEx institutional buying data
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(204).end();
 
@@ -12,19 +10,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let twseData: Record<string, InstitutionEntry> = {};
     let tpexData: Record<string, InstitutionEntry> = {};
 
-    // Try today and last 4 weekdays
     for (let offset = 0; offset < 7; offset++) {
       const d = new Date(now);
       d.setDate(d.getDate() - offset);
       if (d.getDay() === 0 || d.getDay() === 6) continue;
 
       const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-
       const twseURL = `https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date=${dateStr}&selectType=ALLBUT0999`;
       const r = await fetch(twseURL, { headers: { 'User-Agent': UA } });
       if (!r.ok) continue;
       const body = await r.json();
-
       if (body.stat !== 'OK' || !body.data?.length) continue;
 
       twseData = parseTWSE(body);
