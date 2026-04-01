@@ -26,11 +26,11 @@ type BullPickAnalysis struct {
 	TotalNetBuy     float64 `json:"totalNetBuy"`     // 三大法人合計（張）
 	NetBuyDays      int     `json:"netBuyDays"`      // 近N日主力連續買超天數
 
-	// ── 4. 營收 ──
-	Revenue         float64 `json:"revenue"`         // 最新月營收（億）
-	RevenueYoY      float64 `json:"revenueYoY"`      // 營收年增率 (%)
-	RevenueMoM      float64 `json:"revenueMoM"`      // 營收月增率 (%)
-	RevenueMonth    string  `json:"revenueMonth"`    // 營收月份 e.g. "2026-02"
+	// ── 4. 年營收 ──
+	RevenueLatest   float64 `json:"revenueLatest"`   // 最近年度營收（億）
+	RevenuePrev     float64 `json:"revenuePrev"`     // 前一年度營收（億）
+	RevenueGrowth   float64 `json:"revenueGrowth"`   // 年營收成長率 (%)
+	RevenuePeriod   string  `json:"revenuePeriod"`   // e.g. "2025 vs 2024"
 
 	// ── 均線 ──
 	MA20  float64 `json:"ma20"`

@@ -314,10 +314,10 @@ export interface BullPickAnalysis {
   dealerNetBuy: number;
   totalNetBuy: number;
   netBuyDays: number;
-  revenue: number;
-  revenueYoY: number;
-  revenueMoM: number;
-  revenueMonth: string;
+  revenueLatest: number;
+  revenuePrev: number;
+  revenueGrowth: number;
+  revenuePeriod: string;
   ma20: number;
   ma60: number;
   ma120: number;

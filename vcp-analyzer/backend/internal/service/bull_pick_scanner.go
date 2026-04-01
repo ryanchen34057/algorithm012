@@ -3,11 +3,11 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -48,10 +48,10 @@ type InstitutionData struct {
 }
 
 type RevenueData struct {
-	Revenue      float64 // 當月營收（千元）
-	RevenueYoY   float64 // 年增率 %
-	RevenueMoM   float64 // 月增率 %
-	RevenueMonth string  // "2026-02"
+	RevenueLatest float64 // 最近年度營收
+	RevenuePrev   float64 // 前一年度營收
+	RevenueGrowth float64 // 年營收成長率 %
+	Period        string  // "2025 vs 2024"
 }
 
 func NewBullPickScanner() *BullPickScanner {
@@ -246,283 +246,120 @@ func (s *BullPickScanner) fetchTPExInstitution(client *http.Client, date time.Ti
 	log.Printf("[bullpick] TPEx institution data: %d stocks", count)
 }
 
-// ── 月營收 ──
+// ── 年營收（從 Yahoo Finance financialData 抓取）──
+
+// yahooQuoteSummary mirrors Yahoo Finance v10 quoteSummary response
+type yahooQuoteSummary struct {
+	QuoteSummary struct {
+		Result []struct {
+			IncomeStatementHistory struct {
+				IncomeStatementHistory []struct {
+					TotalRevenue struct {
+						Raw float64 `json:"raw"`
+					} `json:"totalRevenue"`
+					EndDate struct {
+						Fmt string `json:"fmt"` // "2025-12-31"
+					} `json:"endDate"`
+				} `json:"incomeStatementHistory"`
+			} `json:"incomeStatementHistory"`
+			FinancialData struct {
+				RevenueGrowth struct {
+					Raw float64 `json:"raw"` // 0.25 = 25%
+				} `json:"revenueGrowth"`
+				TotalRevenue struct {
+					Raw float64 `json:"raw"`
+				} `json:"totalRevenue"`
+			} `json:"financialData"`
+		} `json:"result"`
+	} `json:"quoteSummary"`
+}
 
 func (s *BullPickScanner) fetchRevenueData(client *http.Client) {
-	now := time.Now()
-
-	// 營收公布時間：每月10日前公布上月營收，所以嘗試最近3個月
-	for offset := 1; offset <= 3; offset++ {
-		d := now.AddDate(0, -offset, 0)
-		rocYear := d.Year() - 1911
-		month := int(d.Month())
-		monthStr := fmt.Sprintf("%d-%02d", d.Year(), d.Month())
-
-		total := 0
-
-		// 來源1: TWSE opendata（上市月營收）
-		twseCount := s.fetchRevenueFromOpenData(
-			client,
-			"https://opendata.twse.com.tw/v1/opendata/t187ap05_L",
-			"TWSE", monthStr,
-		)
-		total += twseCount
-
-		// 來源2: TPEx opendata（上櫃月營收）
-		tpexCount := s.fetchRevenueFromOpenData(
-			client,
-			"https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O",
-			"TPEx", monthStr,
-		)
-		total += tpexCount
-
-		// 來源3: MOPS 公開資訊觀測站 — 上市
-		if twseCount == 0 {
-			mopsCount := s.fetchRevenueFromMOPS(client, rocYear, month, "sii", monthStr)
-			total += mopsCount
-		}
-
-		// 來源4: MOPS 公開資訊觀測站 — 上櫃
-		if tpexCount == 0 {
-			mopsCount := s.fetchRevenueFromMOPS(client, rocYear, month, "otc", monthStr)
-			total += mopsCount
-		}
-
-		if total > 0 {
-			log.Printf("[bullpick] Revenue data (%s): %d stocks loaded", monthStr, total)
-			return
-		}
-		log.Printf("[bullpick] Revenue offset=%d (%s) — no data, trying previous month", offset, monthStr)
-	}
-	log.Printf("[bullpick] WARNING: failed to fetch revenue data from all sources")
+	// 年營收從 Yahoo Finance 抓，在 Analyze 裡逐檔抓取（因為每支股票要個別 call）
+	// 這裡不需要批次抓，改為 lazy fetch per stock
+	log.Printf("[bullpick] Revenue will be fetched per-stock from Yahoo Finance")
 }
 
-func (s *BullPickScanner) fetchRevenueFromOpenData(client *http.Client, url, source, monthStr string) int {
-	body, err := getJSON(client, url)
+// FetchStockRevenue fetches annual revenue for a single stock from Yahoo Finance
+func (s *BullPickScanner) FetchStockRevenue(client *http.Client, symbol string) *RevenueData {
+	code := extractStockCode(symbol)
+
+	// Check cache first
+	s.mu.RLock()
+	if cached, ok := s.revenueMap[code]; ok {
+		s.mu.RUnlock()
+		return cached
+	}
+	s.mu.RUnlock()
+
+	// Fetch from Yahoo Finance v10 quoteSummary
+	url := fmt.Sprintf(
+		"https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=incomeStatementHistory,financialData",
+		symbol,
+	)
+
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Printf("[bullpick] %s revenue fetch failed: %v", source, err)
-		return 0
+		return nil
 	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
 
-	// 嘗試解析為 []map[string]string
-	var rows []map[string]string
-	if err := json.Unmarshal(body, &rows); err != nil {
-		log.Printf("[bullpick] %s revenue parse failed: %v", source, err)
-		// Debug: 印出前 200 字看格式
-		preview := string(body)
-		if len(preview) > 200 {
-			preview = preview[:200]
-		}
-		log.Printf("[bullpick] %s response preview: %s", source, preview)
-		return 0
-	}
-
-	if len(rows) == 0 {
-		log.Printf("[bullpick] %s revenue: empty array", source)
-		return 0
-	}
-
-	// Debug: 列出第一行的所有欄位名稱
-	firstRow := rows[0]
-	keys := make([]string, 0, len(firstRow))
-	for k := range firstRow {
-		keys = append(keys, k)
-	}
-	log.Printf("[bullpick] %s revenue fields: %v (total rows: %d)", source, keys, len(rows))
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	count := 0
-	for _, row := range rows {
-		code := findField(row,
-			"公司代號", "公司 代號", "SecuritiesCompanyCode", "Code", "code",
-			"公司代碼", "股票代號",
-		)
-		if code == "" {
-			continue
-		}
-		code = strings.TrimSpace(code)
-		if !is4DigitCode(code) {
-			continue
-		}
-
-		revStr := findField(row,
-			"當月營收", "營業收入-當月營收", "當月營收淨額",
-			"營業收入", "Revenue", "revenue",
-			"營收", "當月營收(千元)",
-		)
-		yoyStr := findField(row,
-			"去年同月增減(%)", "去年同月增減", "營收年增率",
-			"去年同月增減(％)", "去年同期增減(%)", "YoY",
-			"去年同月增減百分比",
-		)
-		momStr := findField(row,
-			"上月比較增減(%)", "上月比較增減", "營收月增率",
-			"上月比較增減(％)", "上月增減(%)", "MoM",
-			"上月比較增減百分比",
-		)
-
-		rev := parseNumber(revStr)
-		yoy := parseNumber(yoyStr)
-		mom := parseNumber(momStr)
-
-		if rev <= 0 {
-			continue
-		}
-
-		s.revenueMap[code] = &RevenueData{
-			Revenue:      rev,
-			RevenueYoY:   yoy,
-			RevenueMoM:   mom,
-			RevenueMonth: monthStr,
-		}
-		count++
-	}
-
-	if count > 0 {
-		log.Printf("[bullpick] %s revenue: loaded %d stocks", source, count)
-	} else if len(rows) > 0 {
-		// Debug: 有資料但沒解析到，印出第一行完整內容
-		sample, _ := json.Marshal(rows[0])
-		log.Printf("[bullpick] %s revenue: %d rows but 0 parsed. Sample row: %s", source, len(rows), string(sample))
-	}
-	return count
-}
-
-// fetchRevenueFromMOPS 從公開資訊觀測站 MOPS 抓取月營收
-// typek: "sii" = 上市, "otc" = 上櫃
-func (s *BullPickScanner) fetchRevenueFromMOPS(client *http.Client, rocYear, month int, typek, monthStr string) int {
-	// MOPS POST API
-	url := "https://mops.twse.com.tw/nas/t21/" + typek + "/t21sc03_" +
-		strconv.Itoa(rocYear) + "_" + strconv.Itoa(month) + "_0.html"
-
-	body, err := getJSON(client, url)
+	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[bullpick] MOPS %s revenue fetch failed: %v", typek, err)
-		return 0
+		return nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
 	}
 
-	// MOPS 回傳的是 HTML table，解析 <td> 內容
-	content := string(body)
-	if !strings.Contains(content, "<table") && !strings.Contains(content, "<TABLE") {
-		// 可能是 JSON 格式的回傳
-		return s.fetchRevenueFromOpenData(client, url, "MOPS-"+typek, monthStr)
+	var qs yahooQuoteSummary
+	if err := json.Unmarshal(body, &qs); err != nil {
+		return nil
 	}
 
-	return s.parseMOPSRevenueHTML(content, monthStr)
-}
-
-// parseMOPSRevenueHTML 解析 MOPS HTML 格式的營收表
-func (s *BullPickScanner) parseMOPSRevenueHTML(html, monthStr string) int {
-	// MOPS HTML 格式：每一行有多個 <td>
-	// 欄位順序大致: 公司代號, 公司名稱, 當月營收, 上月營收, 去年當月營收,
-	//              上月比較增減(%), 去年同月增減(%)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	count := 0
-	// 簡易 HTML 解析：找 <tr> 裡的 <td>
-	rows := strings.Split(html, "</tr>")
-	for _, row := range rows {
-		tds := extractTDs(row)
-		if len(tds) < 7 {
-			continue
-		}
-		code := strings.TrimSpace(tds[0])
-		if !is4DigitCode(code) {
-			continue
-		}
-
-		rev := parseNumber(tds[2])  // 當月營收
-		mom := parseNumber(tds[5])  // 上月比較增減(%)
-		yoy := parseNumber(tds[6])  // 去年同月增減(%)
-
-		if rev <= 0 {
-			continue
-		}
-
-		s.revenueMap[code] = &RevenueData{
-			Revenue:      rev,
-			RevenueYoY:   yoy,
-			RevenueMoM:   mom,
-			RevenueMonth: monthStr,
-		}
-		count++
+	if len(qs.QuoteSummary.Result) == 0 {
+		return nil
 	}
 
-	if count > 0 {
-		log.Printf("[bullpick] MOPS HTML: loaded %d stocks", count)
-	}
-	return count
-}
+	result := qs.QuoteSummary.Result[0]
+	data := &RevenueData{}
 
-// extractTDs extracts text content from <td>...</td> tags in an HTML row
-func extractTDs(row string) []string {
-	var result []string
-	remaining := row
-	for {
-		start := strings.Index(remaining, "<td")
-		if start < 0 {
-			// Also try uppercase
-			start = strings.Index(remaining, "<TD")
-			if start < 0 {
-				break
-			}
+	// 方法1: 從 incomeStatementHistory 取最近兩年營收算成長率
+	stmts := result.IncomeStatementHistory.IncomeStatementHistory
+	if len(stmts) >= 2 {
+		latest := stmts[0]
+		prev := stmts[1]
+		data.RevenueLatest = latest.TotalRevenue.Raw
+		data.RevenuePrev = prev.TotalRevenue.Raw
+		if data.RevenuePrev > 0 {
+			data.RevenueGrowth = (data.RevenueLatest - data.RevenuePrev) / data.RevenuePrev * 100
 		}
-		// Find end of opening tag
-		closeTag := strings.Index(remaining[start:], ">")
-		if closeTag < 0 {
-			break
+		latestYear := ""
+		prevYear := ""
+		if len(latest.EndDate.Fmt) >= 4 {
+			latestYear = latest.EndDate.Fmt[:4]
 		}
-		contentStart := start + closeTag + 1
-		// Find closing </td>
-		endTD := strings.Index(strings.ToLower(remaining[contentStart:]), "</td>")
-		if endTD < 0 {
-			break
+		if len(prev.EndDate.Fmt) >= 4 {
+			prevYear = prev.EndDate.Fmt[:4]
 		}
-		content := remaining[contentStart : contentStart+endTD]
-		// Strip any inner HTML tags
-		content = stripHTMLTags(content)
-		content = strings.TrimSpace(content)
-		result = append(result, content)
-		remaining = remaining[contentStart+endTD+5:]
+		data.Period = latestYear + " vs " + prevYear
+	} else if result.FinancialData.TotalRevenue.Raw > 0 {
+		// 方法2: 從 financialData 取 revenueGrowth
+		data.RevenueLatest = result.FinancialData.TotalRevenue.Raw
+		data.RevenueGrowth = result.FinancialData.RevenueGrowth.Raw * 100 // 0.25 → 25%
+		data.Period = "TTM"
 	}
-	return result
-}
 
-// stripHTMLTags removes HTML tags from a string
-func stripHTMLTags(s string) string {
-	var result strings.Builder
-	inTag := false
-	for _, c := range s {
-		if c == '<' {
-			inTag = true
-		} else if c == '>' {
-			inTag = false
-		} else if !inTag {
-			result.WriteRune(c)
-		}
+	if data.RevenueLatest > 0 {
+		s.mu.Lock()
+		s.revenueMap[code] = data
+		s.mu.Unlock()
+		return data
 	}
-	return result.String()
-}
-
-func findField(m map[string]string, keys ...string) string {
-	for _, k := range keys {
-		if v, ok := m[k]; ok && v != "" {
-			return v
-		}
-	}
-	// Fuzzy: check if any key contains the search term
-	for _, k := range keys {
-		for mk, mv := range m {
-			if strings.Contains(mk, k) && mv != "" {
-				return mv
-			}
-		}
-	}
-	return ""
+	return nil
 }
 
 // ── Analyze ──
@@ -603,28 +440,26 @@ func (s *BullPickScanner) Analyze(chart *model.StockChartData, params BullPickSc
 		totalNetBuy = inst.TotalNetBuy
 	}
 
-	// ── 4. Revenue Data ──
-	stockCode := extractStockCode(chart.Symbol)
-	s.mu.RLock()
-	rev := s.revenueMap[stockCode]
-	s.mu.RUnlock()
+	// ── 4. Annual Revenue Data (from Yahoo Finance) ──
+	revenueLatest := 0.0
+	revenuePrev := 0.0
+	revenueGrowth := 0.0
+	revenuePeriod := ""
 
-	revenue := 0.0
-	revenueYoY := 0.0
-	revenueMoM := 0.0
-	revenueMonth := ""
+	revClient := &http.Client{Timeout: 10 * time.Second}
+	rev := s.FetchStockRevenue(revClient, chart.Symbol)
 	if rev != nil {
-		revenue = rev.Revenue / 100000 // 千元→億
-		revenueYoY = rev.RevenueYoY
-		revenueMoM = rev.RevenueMoM
-		revenueMonth = rev.RevenueMonth
+		revenueLatest = rev.RevenueLatest / 1e8 // → 億
+		revenuePrev = rev.RevenuePrev / 1e8
+		revenueGrowth = rev.RevenueGrowth
+		revenuePeriod = rev.Period
 	}
 
 	// ── Scoring ──
 	score := calcBullPickScore(
 		pattern, maAligned, distHighPct, params.DistHighMax,
 		totalNetBuy, foreignNetBuy, trustNetBuy,
-		revenueYoY, revenueMoM,
+		revenueGrowth,
 		price, ma20, ma60,
 	)
 
@@ -676,10 +511,10 @@ func (s *BullPickScanner) Analyze(chart *model.StockChartData, params BullPickSc
 		DealerNetBuy:  roundTo2(dealerNetBuy),
 		TotalNetBuy:   roundTo2(totalNetBuy),
 
-		Revenue:      roundTo2(revenue),
-		RevenueYoY:   roundTo2(revenueYoY),
-		RevenueMoM:   roundTo2(revenueMoM),
-		RevenueMonth: revenueMonth,
+		RevenueLatest: roundTo2(revenueLatest),
+		RevenuePrev:   roundTo2(revenuePrev),
+		RevenueGrowth: roundTo2(revenueGrowth),
+		RevenuePeriod: revenuePeriod,
 
 		MA20:  roundTo2(ma20),
 		MA60:  roundTo2(ma60),
@@ -702,7 +537,7 @@ func (s *BullPickScanner) Analyze(chart *model.StockChartData, params BullPickSc
 func calcBullPickScore(
 	pattern model.PatternShape, maAligned bool, distHighPct, distHighMax float64,
 	totalNetBuy, foreignNetBuy, trustNetBuy float64,
-	revenueYoY, revenueMoM float64,
+	revenueGrowth float64,
 	price, ma20, ma60 float64,
 ) float64 {
 	score := 0.0
@@ -776,28 +611,26 @@ func calcBullPickScore(
 	}
 	score += math.Min(instScore, 25)
 
-	// ⑤ 年營收高成長 (0-20 pts) — 以 YoY 為主
+	// ⑤ 年營收成長率 (0-20 pts)
 	revScore := 0.0
-	if revenueYoY > 100 {
-		revScore += 18 // 營收翻倍
-	} else if revenueYoY > 50 {
-		revScore += 15
-	} else if revenueYoY > 30 {
+	if revenueGrowth > 100 {
+		revScore += 20 // 營收翻倍
+	} else if revenueGrowth > 50 {
+		revScore += 17
+	} else if revenueGrowth > 30 {
+		revScore += 14
+	} else if revenueGrowth > 20 {
 		revScore += 12
-	} else if revenueYoY > 20 {
-		revScore += 10
-	} else if revenueYoY > 10 {
-		revScore += 7
-	} else if revenueYoY > 0 {
-		revScore += 4
+	} else if revenueGrowth > 10 {
+		revScore += 9
+	} else if revenueGrowth > 0 {
+		revScore += 5
+	} else if revenueGrowth > -10 {
+		revScore += 2 // 小幅衰退
 	} else {
-		revScore += 1 // 營收衰退也給底分
+		revScore += 0 // 營收大幅衰退不給分
 	}
-	// MoM 月增率加分（趨勢加速）
-	if revenueMoM > 10 {
-		revScore += 2
-	}
-	score += math.Min(revScore, 20)
+	score += revScore
 
 	return math.Min(score, 100)
 }
@@ -834,15 +667,6 @@ func (s *BullPickScanner) RevenueCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.revenueMap)
-}
-
-// helper for int parsing with default
-func parseIntDefault(s string, def int) int {
-	v, err := strconv.Atoi(s)
-	if err != nil {
-		return def
-	}
-	return v
 }
 
 // SortBullPickByScore sorts by score descending

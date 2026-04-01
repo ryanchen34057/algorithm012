@@ -115,14 +115,14 @@ export function downloadBullPickCsv(stocks: BullPickAnalysis[]) {
   const headers = ['代碼', '名稱', '市場', '產業', '概念', '收盤價',
     '型態', '多頭排列', '歷史高點', '距歷史高%',
     '外資(張)', '投信(張)', '自營(張)', '法人合計(張)',
-    '營收(億)', '營收YoY%', '營收MoM%', '營收月份',
+    '最近年度營收(億)', '前一年度營收(億)', '年營收成長率%', '營收期間',
     'MA20', 'MA60', 'MA120', 'MA200',
     '進場', '停損', '停損依據', '目標', '風報比', '分數', '日均量(張)'];
   const rows = stocks.map(s => [
     s.symbol.replace(/\.(TW|TWO)$/, ''), s.name, s.market, s.industry, s.conceptTag, s.currentPrice,
     s.patternLabel || '-', s.maAligned ? 'V' : 'X', s.allTimeHigh, s.distHighPct,
     s.foreignNetBuy, s.trustNetBuy, s.dealerNetBuy, s.totalNetBuy,
-    s.revenue, s.revenueYoY, s.revenueMoM, s.revenueMonth,
+    s.revenueLatest, s.revenuePrev, s.revenueGrowth, s.revenuePeriod,
     s.ma20, s.ma60, s.ma120, s.ma200,
     s.entryPrice, s.stopLoss, s.stopLabel, s.target, s.rewardRisk, s.score, s.adv20,
   ]);

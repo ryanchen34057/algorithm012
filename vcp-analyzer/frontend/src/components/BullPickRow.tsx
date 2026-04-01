@@ -117,14 +117,13 @@ export default function BullPickRow({ stock }: Props) {
               bold />
           </InfoCard>
 
-          {/* 營收 */}
-          <InfoCard title={`月營收 ${stock.revenueMonth || ''}`} c={c}>
-            <Metric label="營收" value={stock.revenue > 0 ? `${stock.revenue} 億` : '無資料'} color={c.text} />
-            <Metric label="年增率 YoY" value={stock.revenueYoY !== 0 ? `${stock.revenueYoY > 0 ? '+' : ''}${stock.revenueYoY}%` : '-'}
-              color={stock.revenueYoY > 20 ? c.up : stock.revenueYoY > 0 ? '#f59e0b' : stock.revenueYoY < 0 ? c.down : c.textMuted}
+          {/* 年營收 */}
+          <InfoCard title={`年營收 ${stock.revenuePeriod || ''}`} c={c}>
+            <Metric label="最近年度" value={stock.revenueLatest > 0 ? `${stock.revenueLatest} 億` : '無資料'} color={c.text} />
+            <Metric label="前一年度" value={stock.revenuePrev > 0 ? `${stock.revenuePrev} 億` : '-'} color={c.textMuted} />
+            <Metric label="年營收成長率" value={stock.revenueGrowth !== 0 ? `${stock.revenueGrowth > 0 ? '+' : ''}${stock.revenueGrowth}%` : '-'}
+              color={stock.revenueGrowth > 20 ? c.up : stock.revenueGrowth > 0 ? '#f59e0b' : stock.revenueGrowth < 0 ? c.down : c.textMuted}
               bold />
-            <Metric label="月增率 MoM" value={stock.revenueMoM !== 0 ? `${stock.revenueMoM > 0 ? '+' : ''}${stock.revenueMoM}%` : '-'}
-              color={stock.revenueMoM > 0 ? c.up : stock.revenueMoM < 0 ? c.down : c.textMuted} />
           </InfoCard>
 
           {/* 交易計畫 */}
