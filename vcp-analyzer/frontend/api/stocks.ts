@@ -6,6 +6,9 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 interface StockInfo {
   symbol: string;
   name: string;
+  close: number;
+  volume: number;  // 成交股數
+  date: string;    // TWSE/TPEx 資料日期
 }
 
 export default async function handler(req: any, res: any) {
@@ -39,8 +42,6 @@ export default async function handler(req: any, res: any) {
 }
 
 async function fetchTWSE(minPrice: number, minVolLots: number, debug: string[]): Promise<StockInfo[]> {
-  // URL 1: opendata API → returns array of objects [{Code, Name, ClosingPrice, TradeVolume, ...}]
-  // URL 2: rwd API → returns {fields: [...], data: [["0050","元大台灣50",...], ...]}
   const urls = [
     'https://opendata.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL',
     'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL?response=json',
@@ -75,20 +76,33 @@ async function fetchTWSE(minPrice: number, minVolLots: number, debug: string[]):
           .map((r: any) => ({
             symbol: (r.Code ?? r['證券代號']) + '.TW',
             name: r.Name ?? r['證券名稱'] ?? '',
+            close: parseNum(r.ClosingPrice ?? r['收盤價'] ?? '0'),
+            volume: parseNum(r.TradeVolume ?? r['成交股數'] ?? '0'),
+            date: '',
           }));
         if (result.length > 0) return result;
       }
 
       // Format 2: {fields: [...], data: [[...], ...]} (rwd API)
       if (body.fields && Array.isArray(body.data)) {
-        debug.push(`TWSE format: fields+data, fields: [${body.fields.slice(0, 5).join(',')}], rows: ${body.data.length}`);
+        debug.push(`TWSE format: fields+data, fields: [${body.fields.slice(0, 8).join(',')}], rows: ${body.data.length}`);
         const fields: string[] = body.fields.map((f: string) => f.trim());
         const codeIdx = fields.findIndex((f: string) => f.includes('證券代號'));
         const nameIdx = fields.findIndex((f: string) => f.includes('證券名稱'));
         const priceIdx = fields.findIndex((f: string) => f.includes('收盤價'));
         const volIdx = fields.findIndex((f: string) => f.includes('成交股數') || f.includes('成交量'));
+        const openIdx = fields.findIndex((f: string) => f.includes('開盤價'));
+        const highIdx = fields.findIndex((f: string) => f.includes('最高價'));
+        const lowIdx = fields.findIndex((f: string) => f.includes('最低價'));
 
         debug.push(`TWSE indices: code=${codeIdx}, name=${nameIdx}, price=${priceIdx}, vol=${volIdx}`);
+
+        // Extract date from response body
+        const twseDate = body.date ?? ''; // e.g. "20260401"
+        const dateFmt = twseDate.length === 8
+          ? `${twseDate.slice(0, 4)}-${twseDate.slice(4, 6)}-${twseDate.slice(6, 8)}`
+          : '';
+        if (dateFmt) debug.push(`TWSE date: ${dateFmt}`);
 
         if (codeIdx < 0) continue;
 
@@ -104,28 +118,12 @@ async function fetchTWSE(minPrice: number, minVolLots: number, debug: string[]):
           result.push({
             symbol: code + '.TW',
             name: nameIdx >= 0 ? String(row[nameIdx]).trim() : '',
+            close: price,
+            volume: volIdx >= 0 ? parseNum(String(row[volIdx])) : 0,
+            date: dateFmt,
           });
         }
         debug.push(`TWSE filtered: ${result.length}`);
-        if (result.length > 0) return result;
-      }
-
-      // Format 3: {data: [{...}, ...]} wrapper
-      if (body.data && Array.isArray(body.data) && body.data.length > 0 && typeof body.data[0] === 'object' && !Array.isArray(body.data[0])) {
-        debug.push(`TWSE format: data wrapper, rows: ${body.data.length}`);
-        const result = body.data
-          .filter((r: any) => {
-            const code = r.Code ?? r['證券代號'] ?? '';
-            if (!/^\d{4}$/.test(code)) return false;
-            const price = parseNum(r.ClosingPrice ?? r['收盤價'] ?? '0');
-            if (price < minPrice) return false;
-            const vol = parseNum(r.TradeVolume ?? r['成交股數'] ?? '0') / 1000;
-            return vol >= minVolLots;
-          })
-          .map((r: any) => ({
-            symbol: (r.Code ?? r['證券代號']) + '.TW',
-            name: r.Name ?? r['證券名稱'] ?? '',
-          }));
         if (result.length > 0) return result;
       }
 
@@ -154,6 +152,18 @@ async function fetchTPEx(minPrice: number, minVolLots: number, debug: string[]):
     const rows: any[] = await r.json();
     debug.push(`TPEx raw rows: ${rows.length}`);
 
+    // TPEx date from first row
+    const tpexDateRaw = rows[0]?.Date ?? ''; // e.g. "115/03/31"
+    let tpexDate = '';
+    if (tpexDateRaw) {
+      const parts = tpexDateRaw.split('/');
+      if (parts.length === 3) {
+        const y = parseInt(parts[0]) + 1911;
+        tpexDate = `${y}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+      debug.push(`TPEx date: ${tpexDate}`);
+    }
+
     return rows
       .filter((r) => {
         const code = r.SecuritiesCompanyCode ?? '';
@@ -166,6 +176,9 @@ async function fetchTPEx(minPrice: number, minVolLots: number, debug: string[]):
       .map((r) => ({
         symbol: r.SecuritiesCompanyCode + '.TWO',
         name: r.CompanyName ?? '',
+        close: parseNum(r.Close ?? '0'),
+        volume: parseNum(r.TradingShares ?? '0'),
+        date: tpexDate,
       }));
   } catch (e) {
     debug.push(`TPEx error: ${e}`);

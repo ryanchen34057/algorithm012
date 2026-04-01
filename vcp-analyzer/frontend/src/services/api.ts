@@ -15,8 +15,16 @@ async function fetchJSON<T>(path: string): Promise<T> {
 
 // ── Stock List ──
 
+interface StockListItem {
+  symbol: string;
+  name: string;
+  close: number;
+  volume: number;
+  date: string;  // TWSE/TPEx 資料日期 (e.g. "2026-04-01")
+}
+
 interface StockListResponse {
-  stocks: { symbol: string; name: string }[];
+  stocks: StockListItem[];
   total: number;
   debug?: string[];
 }
@@ -152,15 +160,32 @@ export async function scanBullPick(
       const chartData = charts[j];
 
       if (chartData?.candles) {
+        let candles = chartData.candles;
+
+        // Patch: if TWSE/TPEx has newer data than Yahoo Finance, append it
+        if (s.close > 0 && s.date) {
+          const lastCandle = candles[candles.length - 1];
+          if (lastCandle && s.date > lastCandle.date) {
+            candles = [...candles, {
+              date: s.date,
+              open: s.close,  // approximate: use close as OHLC
+              high: s.close,
+              low: s.close,
+              close: s.close,
+              volume: s.volume,
+            }];
+          }
+        }
+
         // Track the latest candle date across all stocks
-        const lastCandle = chartData.candles[chartData.candles.length - 1];
+        const lastCandle = candles[candles.length - 1];
         if (lastCandle && lastCandle.date > latestDate) latestDate = lastCandle.date;
 
         const inst = instMap[s.symbol];
         const result = analyze(
           s.symbol,
           s.name || chartData.name,
-          chartData.candles,
+          candles,
           p,
           inst,
           null, // revenue fetched separately for matched stocks
