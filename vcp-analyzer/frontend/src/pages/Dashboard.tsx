@@ -5,6 +5,7 @@ import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import BullPickRow from '../components/BullPickRow';
 import { downloadBullPickCsv } from '../utils/csvExport';
+import IndustryHeatmap from '../components/IndustryHeatmap';
 
 // ── Bull Pick Scanner Types ──
 interface BullPickFilter {
@@ -143,6 +144,9 @@ export default function Dashboard() {
           <DownloadCsvButton count={stocks.length} onDownload={() => downloadBullPickCsv(stocks)} />
         </div>
       )}
+
+      {/* Industry heatmap */}
+      <IndustryHeatmap stocks={stocks} />
 
       {/* Stock cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

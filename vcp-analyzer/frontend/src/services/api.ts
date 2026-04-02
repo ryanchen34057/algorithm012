@@ -43,7 +43,12 @@ interface RevenueResponse {
   error?: string;
 }
 
-// ── Chart Data (Yahoo Finance) ──
+// ── Industry Data ──
+
+interface IndustryResponse {
+  data: Record<string, { industry: string; concept: string }>;
+  count: number;
+}
 
 async function fetchChart(symbol: string): Promise<{ candles: OHLCV[]; name: string } | null> {
   try {
@@ -127,16 +132,19 @@ export async function scanBullPick(
     minScore: params.minScore ?? 40,
   };
 
-  // Step 1: Fetch stock list + institution data + market status in parallel
-  const [stockListRes, instRes, market] = await Promise.all([
+  // Step 1: Fetch stock list + institution data + industry + market status in parallel
+  const [stockListRes, instRes, indRes, market] = await Promise.all([
     fetchJSON<StockListResponse>(`/api/stocks?minPrice=${p.minPrice}&minVolume=0`),
     fetchJSON<InstitutionResponse>('/api/institution'),
+    fetchJSON<IndustryResponse>('/api/industry').catch(() => ({ data: {}, count: 0 } as IndustryResponse)),
     fetchMarketStatus(),
   ]);
 
   const stocks = stockListRes.stocks;
   const instMap = instRes.data ?? {};
+  const indMap = indRes.data ?? {};
   const total = stocks.length;
+  console.log(`[scanner] industry data: ${Object.keys(indMap).length} entries`);
 
   // Debug: log stock list source info
   if (stockListRes.debug) {
@@ -190,7 +198,15 @@ export async function scanBullPick(
           inst,
           null, // revenue fetched separately for matched stocks
         );
-        if (result) results.push(result);
+        if (result) {
+          // Attach industry data
+          const ind = indMap[s.symbol];
+          if (ind) {
+            result.industry = ind.industry || result.industry;
+            result.conceptTag = ind.concept || result.conceptTag;
+          }
+          results.push(result);
+        }
       }
       done++;
     }
