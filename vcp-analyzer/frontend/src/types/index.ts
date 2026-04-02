@@ -199,7 +199,7 @@ export interface SuperPerfScanResult {
 
 // ── Elite Pick Scanner (精選突破) ──
 
-export type PatternShapeType = 'u_shape' | 'n_shape' | 'cup' | 'none';
+export type PatternShapeType = 'w_bottom' | 'u_shape' | 'n_shape' | 'cup' | 'none';
 export type MarketTrendType = 'bull' | 'bear' | 'neutral';
 export type SellSignalType = '' | 'big_black_k' | 'below_ma10' | 'both';
 

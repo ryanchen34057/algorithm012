@@ -208,7 +208,11 @@ function detectShape(candles: OHLCV[], n: number): [PatternShapeType, string] {
   if (lb > n - 10) lb = n - 10;
   const start = n - lb;
 
-  // Find lowest point
+  // Try W bottom first (most specific pattern)
+  const wResult = detectWBottom(candles, start, n);
+  if (wResult) return wResult;
+
+  // Find lowest point for other patterns
   let lowestIdx = start;
   for (let i = start; i < n; i++) {
     if (candles[i].low < candles[lowestIdx].low) lowestIdx = i;
@@ -251,6 +255,78 @@ function detectShape(candles: OHLCV[], n: number): [PatternShapeType, string] {
   return ['none', ''];
 }
 
+// ── W Bottom (雙重底) Detection ──
+// Criteria:
+// 1. Find two significant pivot lows within the lookback period
+// 2. Two lows must be within 5% of each other
+// 3. At least 10 trading days apart
+// 4. A neckline (middle high between the two lows) must exist
+// 5. Drop from neckline to lows must be > 5%
+// 6. Current price has recovered above 50% of neckline-to-low distance, or near/above neckline
+
+function detectWBottom(candles: OHLCV[], start: number, end: number): [PatternShapeType, string] | null {
+  const minGap = 10; // minimum trading days between two lows
+  const pivotN = 3;  // pivot detection window
+
+  // Find all pivot lows
+  const pivotLows: { idx: number; low: number }[] = [];
+  for (let i = start + pivotN; i < end - pivotN; i++) {
+    let isPivot = true;
+    for (let j = 1; j <= pivotN; j++) {
+      if (candles[i].low >= candles[i - j].low || candles[i].low >= candles[i + j].low) {
+        isPivot = false;
+        break;
+      }
+    }
+    if (isPivot) {
+      pivotLows.push({ idx: i, low: candles[i].low });
+    }
+  }
+
+  if (pivotLows.length < 2) return null;
+
+  const price = candles[end - 1].close;
+
+  // Try all pairs of pivot lows (prefer the most recent valid W)
+  for (let a = pivotLows.length - 2; a >= 0; a--) {
+    for (let b = a + 1; b < pivotLows.length; b++) {
+      const low1 = pivotLows[a];
+      const low2 = pivotLows[b];
+
+      // Must be at least minGap days apart
+      if (low2.idx - low1.idx < minGap) continue;
+
+      // Two lows must be within 5% of each other
+      const lowDiff = Math.abs(low1.low - low2.low) / Math.min(low1.low, low2.low) * 100;
+      if (lowDiff > 5) continue;
+
+      // Find neckline (highest point between the two lows)
+      let neckline = 0;
+      for (let i = low1.idx + 1; i < low2.idx; i++) {
+        if (candles[i].high > neckline) neckline = candles[i].high;
+      }
+
+      if (neckline <= 0) continue;
+
+      // Neckline must be meaningfully above the lows (at least 5% drop)
+      const avgLow = (low1.low + low2.low) / 2;
+      const dropPct = ((neckline - avgLow) / neckline) * 100;
+      if (dropPct < 5) continue;
+
+      // Current price must have recovered: above 50% of neckline, or above neckline
+      const recoveryLevel = avgLow + (neckline - avgLow) * 0.5;
+      if (price < recoveryLevel) continue;
+
+      // Second low must not be too old (within last 30 candles)
+      if (end - low2.idx > 30) continue;
+
+      return ['w_bottom', 'W底（雙重底）'];
+    }
+  }
+
+  return null;
+}
+
 function findSecondLow(candles: OHLCV[], start: number, end: number, firstLowIdx: number): boolean {
   if (firstLowIdx >= end - 10) return false;
   const pivotN = 5;
@@ -282,6 +358,7 @@ function calcBullPickScore(
   // ① Pattern (0-20)
   let patternScore = 5;
   if (pattern === 'cup') patternScore = 20;
+  else if (pattern === 'w_bottom') patternScore = 19;
   else if (pattern === 'u_shape') patternScore = 17;
   else if (pattern === 'n_shape') patternScore = 14;
 
