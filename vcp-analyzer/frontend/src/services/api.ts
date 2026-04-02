@@ -283,14 +283,26 @@ export async function scanBullPick(
   };
 
   // Step 1: Fetch stock list + institution data + market status in parallel
-  const [stockListRes, instRes, market] = await Promise.all([
+  let stockListRes = await Promise.all([
     fetchJSON<StockListResponse>(`/api/stocks?minPrice=${p.minPrice}&minVolume=0`),
     fetchJSON<InstitutionResponse>('/api/institution'),
     fetchMarketStatus(),
-  ]);
+  ]).then(([s, i, m]) => ({ stockListRes: s, instRes: i, market: m }));
 
-  const stocks = stockListRes.stocks;
-  const instMap = instRes.data ?? {};
+  // Retry stock list if TWSE failed (< 1000 stocks means TWSE likely down)
+  if (stockListRes.stockListRes.stocks.length < 1000) {
+    console.log(`[scanner] only ${stockListRes.stockListRes.stocks.length} stocks, retrying stock list...`);
+    await new Promise(r => setTimeout(r, 2000));
+    const retry = await fetchJSON<StockListResponse>(`/api/stocks?minPrice=${p.minPrice}&minVolume=0`).catch(() => null);
+    if (retry && retry.stocks.length > stockListRes.stockListRes.stocks.length) {
+      stockListRes = { ...stockListRes, stockListRes: retry };
+      console.log(`[scanner] retry got ${retry.stocks.length} stocks`);
+    }
+  }
+
+  const stocks = stockListRes.stockListRes.stocks;
+  const instMap = stockListRes.instRes.data ?? {};
+  const market = stockListRes.market;
   const total = stocks.length;
 
   // Step 1b: Fetch industry data (API may fail from overseas, has code-based fallback)
@@ -300,10 +312,10 @@ export async function scanBullPick(
   console.log(`[scanner] industry data: ${Object.keys(indMap).length} entries`);
 
   // Debug: log stock list source info
-  if (stockListRes.debug) {
-    console.log('[scanner] stock list debug:', stockListRes.debug);
+  if (stockListRes.stockListRes.debug) {
+    console.log('[scanner] stock list debug:', stockListRes.stockListRes.debug);
   }
-  console.log(`[scanner] ${total} stocks loaded (TWSE+TPEx), institution: ${Object.keys(instMap).length}`, stockListRes.debug);
+  console.log(`[scanner] ${total} stocks loaded (TWSE+TPEx), institution: ${Object.keys(instMap).length}`);
 
   // Compute industry sectors from ALL stocks (not just filtered)
   const industries = computeIndustrySectors(stocks, instMap, indMap);

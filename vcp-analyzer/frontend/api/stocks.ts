@@ -43,22 +43,29 @@ export default async function handler(req: any, res: any) {
 
 async function fetchTWSE(minPrice: number, minVolLots: number, debug: string[]): Promise<StockInfo[]> {
   const urls = [
-    'https://opendata.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL',
     'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY_ALL?response=json',
+    'https://opendata.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL',
   ];
 
+  // Try each URL up to 2 times with a short delay
   for (const url of urls) {
-    try {
-      debug.push(`TWSE trying: ${url}`);
-      const r = await fetch(url, {
-        headers: {
-          'User-Agent': UA,
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
-        },
-      });
-      debug.push(`TWSE ${url} → HTTP ${r.status}`);
-      if (!r.ok) continue;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        if (attempt > 1) {
+          debug.push(`TWSE retry #${attempt}: ${url}`);
+          await new Promise(r => setTimeout(r, 1000));
+        } else {
+          debug.push(`TWSE trying: ${url}`);
+        }
+        const r = await fetch(url, {
+          headers: {
+            'User-Agent': UA,
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
+          },
+        });
+        debug.push(`TWSE ${url} → HTTP ${r.status}`);
+        if (!r.ok) continue;
       const body = await r.json();
 
       // Format 1: Array of objects (opendata API)
@@ -128,9 +135,10 @@ async function fetchTWSE(minPrice: number, minVolLots: number, debug: string[]):
       }
 
       debug.push(`TWSE: unrecognized format, keys: ${Object.keys(body).join(',')}`);
-    } catch (e) {
-      debug.push(`TWSE ${url} error: ${e}`);
-      continue;
+      } catch (e) {
+        debug.push(`TWSE ${url} attempt ${attempt} error: ${e}`);
+        continue;
+      }
     }
   }
   return [];
