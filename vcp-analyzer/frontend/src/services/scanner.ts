@@ -41,6 +41,7 @@ export function analyze(
   params: BullPickParams,
   institution?: InstitutionEntry,
   revenue?: RevenueEntry | null,
+  overrideATH?: { high: number; date: string },
 ): BullPickAnalysis | null {
   const n = candles.length;
   if (n < 130) return null;
@@ -67,8 +68,10 @@ export function analyze(
   const maAligned = price > ma20 && ma20 > ma60 && (ma120 <= 0 || ma60 > ma120);
 
   // 2. Distance to All-Time High
-  let allTimeHigh = 0;
-  let allTimeHighDate = '';
+  // Use override (from monthly data, up to 20 years) if available, otherwise use candle data
+  let allTimeHigh = overrideATH?.high ?? 0;
+  let allTimeHighDate = overrideATH?.date ?? '';
+  // Also check daily candles in case they have a higher value
   for (const c of candles) {
     if (c.high > allTimeHigh) {
       allTimeHigh = c.high;

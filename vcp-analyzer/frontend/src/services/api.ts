@@ -182,16 +182,34 @@ interface IndustryResponse {
   count: number;
 }
 
-async function fetchChart(symbol: string): Promise<{ candles: OHLCV[]; name: string } | null> {
+async function fetchChart(symbol: string): Promise<{ candles: OHLCV[]; name: string; allTimeHigh?: number; allTimeHighDate?: string } | null> {
   try {
-    const data = await fetchJSON<Record<string, unknown>>(`/api/chart?symbol=${encodeURIComponent(symbol)}`);
-    const candles = parseYahooChart(data, symbol, '');
+    // Fetch daily chart (2 years) for analysis + monthly chart (20 years) for true ATH
+    const [dailyData, monthlyData] = await Promise.all([
+      fetchJSON<Record<string, unknown>>(`/api/chart?symbol=${encodeURIComponent(symbol)}`),
+      fetchJSON<Record<string, unknown>>(`/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1mo`),
+    ]);
+
+    const candles = parseYahooChart(dailyData, symbol, '');
     if (!candles) return null;
 
-    // Extract name from Yahoo response
-    const meta = (data as any)?.chart?.result?.[0]?.meta;
+    const meta = (dailyData as any)?.chart?.result?.[0]?.meta;
     const name = meta?.shortName ?? meta?.symbol ?? symbol;
-    return { candles, name };
+
+    // Find true all-time high from monthly data (up to 20 years)
+    let allTimeHigh = 0;
+    let allTimeHighDate = '';
+    const monthlyCandles = parseYahooChart(monthlyData, symbol, '');
+    if (monthlyCandles) {
+      for (const c of monthlyCandles) {
+        if (c.high > allTimeHigh) {
+          allTimeHigh = c.high;
+          allTimeHighDate = c.date;
+        }
+      }
+    }
+
+    return { candles, name, allTimeHigh: allTimeHigh || undefined, allTimeHighDate: allTimeHighDate || undefined };
   } catch {
     return null;
   }
@@ -329,6 +347,8 @@ export async function scanBullPick(
         if (lastCandle && lastCandle.date > latestDate) latestDate = lastCandle.date;
 
         const inst = instMap[s.symbol];
+        // Pass true ATH from monthly data (up to 20 years)
+        const ath = chartData.allTimeHigh ? { high: chartData.allTimeHigh, date: chartData.allTimeHighDate ?? '' } : undefined;
         const result = analyze(
           s.symbol,
           s.name || chartData.name,
@@ -336,6 +356,7 @@ export async function scanBullPick(
           p,
           inst,
           null, // revenue fetched separately for matched stocks
+          ath,
         );
         if (result) {
           // Attach industry data from API or fallback
