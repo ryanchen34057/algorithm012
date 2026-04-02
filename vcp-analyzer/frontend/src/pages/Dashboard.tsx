@@ -172,6 +172,14 @@ export default function Dashboard() {
           background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10,
           padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8,
         }}>
+          {totalScanned < 1000 && (
+            <div style={{
+              background: '#ef444415', border: '1px solid #ef444433', borderRadius: 8,
+              padding: '8px 12px', fontSize: 12, color: '#ef4444', fontWeight: 600,
+            }}>
+              ⚠ 僅掃描到 {totalScanned} 支股票（正常應約 1700 支）。TWSE 上市股票資料可能抓取失敗，目前結果僅包含上櫃股票。建議稍後重新掃描。
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ color: c.textDim, fontSize: 13 }}>
               掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
