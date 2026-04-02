@@ -125,6 +125,7 @@ const INDICES = [
   { symbol: '^DJI', name: 'Dow Jones' },
   { symbol: '^SOX', name: '費半指數' },
   { symbol: '^TWII', name: '台灣加權' },
+  { symbol: 'TWN=F', name: '台指夜盤' },
   { symbol: 'NQ=F', name: '那斯達克期貨' },
   { symbol: 'ES=F', name: 'S&P 期貨' },
 ];
