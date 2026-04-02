@@ -108,6 +108,65 @@ interface RevenueResponse {
   error?: string;
 }
 
+// ── Global Indices ──
+
+export interface IndexQuote {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  changePct: number;
+  time: string;  // last update time
+}
+
+const INDICES = [
+  { symbol: '^GSPC', name: 'S&P 500' },
+  { symbol: '^IXIC', name: 'Nasdaq' },
+  { symbol: '^DJI', name: 'Dow Jones' },
+  { symbol: '^SOX', name: '費半指數' },
+  { symbol: '^TWII', name: '台灣加權' },
+  { symbol: 'NQ=F', name: '那斯達克期貨' },
+  { symbol: 'ES=F', name: 'S&P 期貨' },
+];
+
+export async function fetchIndices(): Promise<IndexQuote[]> {
+  const results: IndexQuote[] = [];
+  const promises = INDICES.map(async (idx) => {
+    try {
+      const data = await fetchJSON<Record<string, unknown>>(`/api/chart?symbol=${encodeURIComponent(idx.symbol)}`);
+      const meta = (data as any)?.chart?.result?.[0]?.meta;
+      if (!meta) return null;
+
+      const price = meta.regularMarketPrice ?? 0;
+      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
+      const change = prevClose > 0 ? price - prevClose : 0;
+      const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+
+      // Format update time
+      const ts = meta.regularMarketTime ?? 0;
+      const d = new Date(ts * 1000);
+      const time = d.toLocaleString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+      return {
+        symbol: idx.symbol,
+        name: idx.name,
+        price: Math.round(price * 100) / 100,
+        change: Math.round(change * 100) / 100,
+        changePct: Math.round(changePct * 100) / 100,
+        time,
+      };
+    } catch {
+      return null;
+    }
+  });
+
+  const settled = await Promise.all(promises);
+  for (const q of settled) {
+    if (q) results.push(q);
+  }
+  return results;
+}
+
 // ── Industry Data ──
 
 interface IndustryResponse {

@@ -6,6 +6,7 @@ import ThemeToggle from '../components/ThemeToggle';
 import BullPickRow from '../components/BullPickRow';
 import { downloadBullPickCsv } from '../utils/csvExport';
 import IndustryHeatmap from '../components/IndustryHeatmap';
+import MarketOverview from '../components/MarketOverview';
 
 // ── Bull Pick Scanner Types ──
 interface BullPickFilter {
@@ -88,6 +89,9 @@ export default function Dashboard() {
       }}>
         本系統只顯示最新的盤後收盤資料，不是即時報價。建議於收盤後（下午 2:00 後）使用。
       </div>
+
+      {/* Global indices & futures */}
+      <MarketOverview />
 
       {/* Filter bar */}
       <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
