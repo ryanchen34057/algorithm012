@@ -344,6 +344,8 @@ export interface BullPickAnalysis {
   stopLabel: string;
   target: number;
   targetLabel: string;
+  target2: number;
+  target2Label: string;
   rewardRisk: number;
   adv20: number;
   todayVolume: number;

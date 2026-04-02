@@ -60,8 +60,9 @@ export default function BullPickRow({ stock }: Props) {
   const lines: PriceLine[] = [
     { price: stock.entryPrice, color: c.blue, title: `進場 ${stock.entryPrice}` },
     { price: stock.stopLoss, color: '#ef4444', title: `停損 ${stock.stopLoss}` },
-    { price: stock.target, color: '#22c55e', title: `目標 ${stock.target}` },
-    { price: stock.allTimeHigh, color: '#f59e0b', title: `歷史高 ${stock.allTimeHigh}`, lineStyle: 1 },
+    { price: stock.target, color: '#22c55e', title: `T1 ${stock.target}` },
+    { price: stock.target2, color: '#16a34a', title: `T2 ${stock.target2}`, lineStyle: 1 },
+    { price: stock.allTimeHigh, color: '#f59e0b', title: `ATH ${stock.allTimeHigh}`, lineStyle: 1 },
   ];
 
   const bd = stock.scoreBreakdown;
@@ -251,13 +252,16 @@ export default function BullPickRow({ stock }: Props) {
             </InfoCard>
 
             <InfoCard title="交易計畫" c={c}>
-              <Metric label="進場" value={`${stock.entryPrice}`} color={c.blue} />
               <Metric label="停損" value={`${stock.stopLoss}`} color="#ef4444" sub={stock.stopLabel} />
-              <Metric label="目標" value={`${stock.target}`} color="#22c55e" sub={stock.targetLabel} />
-              <Metric label="風報比" value={stock.rewardRisk > 0 ? `1 : ${stock.rewardRisk}` : '-'}
+              <Metric label="T1 目標" value={`${stock.target}`} color="#22c55e" sub={stock.targetLabel} />
+              <Metric label="T2 目標" value={`${stock.target2}`} color="#16a34a" sub={stock.target2Label} />
+              <Metric label="風報比 (T1)" value={stock.rewardRisk > 0 ? `1 : ${stock.rewardRisk}` : '-'}
                 color={stock.rewardRisk >= 3 ? c.up : c.blue} />
             </InfoCard>
           </div>
+
+          {/* Position Calculator */}
+          <PositionCalculator stock={stock} c={c} />
 
           {/* MA tags */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -268,6 +272,84 @@ export default function BullPickRow({ stock }: Props) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PositionCalculator({ stock, c }: { stock: BullPickAnalysis; c: ReturnType<typeof useColors> }) {
+  const [entryPrice, setEntryPrice] = useState(stock.entryPrice);
+  const [riskAmount, setRiskAmount] = useState(10000);
+
+  const riskPerShare = entryPrice - stock.stopLoss;
+  const shares = riskPerShare > 0 ? Math.floor(riskAmount / riskPerShare) : 0;
+  const totalCost = shares * entryPrice;
+  const maxLoss = shares * riskPerShare;
+  const profitT1 = shares * (stock.target - entryPrice);
+  const profitT2 = shares * (stock.target2 - entryPrice);
+  const rrT1 = riskPerShare > 0 ? ((stock.target - entryPrice) / riskPerShare) : 0;
+  const rrT2 = riskPerShare > 0 ? ((stock.target2 - entryPrice) / riskPerShare) : 0;
+
+  return (
+    <div style={{
+      background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10,
+      padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10,
+    }}>
+      <span style={{ fontSize: 12, fontWeight: 800, color: c.text, letterSpacing: '0.02em' }}>
+        部位計算機
+      </span>
+
+      {/* Inputs */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <label style={{ fontSize: 11, color: c.textMuted }}>進場價</label>
+          <input type="number" value={entryPrice} step={0.5}
+            onChange={(e) => setEntryPrice(Number(e.target.value))}
+            style={{
+              background: c.bgInput, border: `1px solid ${c.border}`, borderRadius: 6,
+              color: c.text, fontSize: 15, fontWeight: 700, padding: '6px 10px',
+              outline: 'none', width: 100,
+            }} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <label style={{ fontSize: 11, color: c.textMuted }}>可承受風險（元）</label>
+          <input type="number" value={riskAmount} step={1000}
+            onChange={(e) => setRiskAmount(Number(e.target.value))}
+            style={{
+              background: c.bgInput, border: `1px solid ${c.border}`, borderRadius: 6,
+              color: c.text, fontSize: 15, fontWeight: 700, padding: '6px 10px',
+              outline: 'none', width: 120,
+            }} />
+        </div>
+      </div>
+
+      {/* Results */}
+      {riskPerShare > 0 ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+          <ResultBox label="建議股數" value={`${shares} 股`} sub={`${Math.floor(shares / 1000)} 張 + ${shares % 1000} 股`} color={c.blue} c={c} />
+          <ResultBox label="總成本" value={`$${totalCost.toLocaleString()}`} color={c.text} c={c} />
+          <ResultBox label="最大損失" value={`-$${Math.round(maxLoss).toLocaleString()}`} color="#ef4444" c={c} />
+          <ResultBox label="T1 預估獲利" value={`+$${Math.round(profitT1).toLocaleString()}`} sub={`風報比 1:${rrT1.toFixed(1)}`} color="#22c55e" c={c} />
+          <ResultBox label="T2 預估獲利" value={`+$${Math.round(profitT2).toLocaleString()}`} sub={`風報比 1:${rrT2.toFixed(1)}`} color="#16a34a" c={c} />
+          <ResultBox label="每股風險" value={`$${riskPerShare.toFixed(1)}`} sub={`停損 ${stock.stopLoss}`} color="#f59e0b" c={c} />
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: '#ef4444' }}>進場價必須高於停損價 {stock.stopLoss}</div>
+      )}
+    </div>
+  );
+}
+
+function ResultBox({ label, value, sub, color, c }: {
+  label: string; value: string; sub?: string; color: string; c: ReturnType<typeof useColors>;
+}) {
+  return (
+    <div style={{
+      background: color + '08', border: `1px solid ${color}22`, borderRadius: 8,
+      padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2,
+    }}>
+      <span style={{ fontSize: 10, color: c.textMuted }}>{label}</span>
+      <span style={{ fontSize: 15, fontWeight: 800, color }}>{value}</span>
+      {sub && <span style={{ fontSize: 10, color: c.textMuted }}>{sub}</span>}
     </div>
   );
 }

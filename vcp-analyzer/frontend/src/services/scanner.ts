@@ -110,12 +110,48 @@ export function analyze(
     finalStopLoss = r2(price * 0.95);
     risk = price - finalStopLoss;
   }
-  let target = r2(price + 2 * risk);
-  let targetLabel = '2:1 風報比';
-  if (distHighPct < 3) {
-    target = r2(price + 3 * risk);
-    targetLabel = '接近歷史高 3:1';
+
+  // ATR(20) for volatility-based targets
+  const atr20 = calcATR(candles, n, 20);
+
+  // Find recent swing low for Fibonacci extension
+  let swingLow = price;
+  for (let i = Math.max(0, n - 60); i < n; i++) {
+    if (candles[i].low < swingLow) swingLow = candles[i].low;
   }
+  const fibRange = allTimeHigh - swingLow;
+
+  // Hybrid target calculation
+  let target: number;
+  let targetLabel: string;
+  let target2: number;
+  let target2Label: string;
+
+  if (distHighPct > 0) {
+    // T1: ATH (歷史高點 = 自然壓力位)
+    target = r2(allTimeHigh);
+    targetLabel = '歷史高點';
+    // T2: ATH + 1.5 × ATR(20) (突破後的動態延伸)
+    target2 = r2(allTimeHigh + 1.5 * atr20);
+    target2Label = 'ATH + 1.5×ATR';
+  } else {
+    // Already above ATH → use Fibonacci extensions from swing low to ATH
+    target = r2(swingLow + fibRange * 1.272);
+    targetLabel = 'Fib 1.272';
+    target2 = r2(swingLow + fibRange * 1.618);
+    target2Label = 'Fib 1.618';
+  }
+
+  // Sanity check: target must be above entry
+  if (target <= price) {
+    target = r2(price + 2 * atr20);
+    targetLabel = '2×ATR';
+  }
+  if (target2 <= target) {
+    target2 = r2(price + 3 * atr20);
+    target2Label = '3×ATR';
+  }
+
   const rr = risk > 0 ? r2((target - price) / risk) : 0;
 
   const market = symbol.endsWith('.TWO') ? '上櫃' : '上市';
@@ -152,6 +188,8 @@ export function analyze(
     stopLabel,
     target,
     targetLabel,
+    target2,
+    target2Label,
     rewardRisk: rr,
     adv20: r2(adv20),
     todayVolume: today.volume,
@@ -318,6 +356,21 @@ function calcStopLoss(candles: OHLCV[], n: number, price: number, ma20: number):
   if (support > ma20Stop && support < price) return [support, '近期支撐'];
   if (ma20Stop < price) return [ma20Stop, '20日均線'];
   return [r2(price * 0.95), '預設5%停損'];
+}
+
+// ── ATR (Average True Range) ──
+
+function calcATR(candles: OHLCV[], n: number, period: number): number {
+  if (n < period + 1) return 0;
+  let sum = 0;
+  for (let i = n - period; i < n; i++) {
+    const high = candles[i].high;
+    const low = candles[i].low;
+    const prevClose = candles[i - 1].close;
+    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+    sum += tr;
+  }
+  return sum / period;
 }
 
 // ── Helpers ──
