@@ -318,6 +318,9 @@ function PositionCalculator({ stock, c }: { stock: BullPickAnalysis; c: ReturnTy
     }}>
       <span style={{ fontSize: 12, fontWeight: 800, color: c.text, letterSpacing: '0.02em' }}>
         部位計算機
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', marginLeft: 8 }}>
+          停損：{stock.stopLoss}（{stock.stopLabel}）
+        </span>
       </span>
 
       {/* Inputs */}
