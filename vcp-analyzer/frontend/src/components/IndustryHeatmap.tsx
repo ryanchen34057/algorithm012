@@ -11,7 +11,7 @@ interface IndustryGroup {
   count: number;
   avgChange: number;
   totalNetBuy: number;
-  avgScore: number;
+  topScore: number;
   topStock: string;
   topStockName: string;
 }
@@ -51,7 +51,7 @@ export default function IndustryHeatmap({ stocks }: Props) {
         count: g.count,
         avgChange: Math.round(avg(g.changes) * 100) / 100,
         totalNetBuy: Math.round(g.netBuys.reduce((a, b) => a + b, 0)),
-        avgScore: Math.round(avg(g.scores)),
+        topScore: g.topScore,
         topStock: g.topSymbol,
         topStockName: g.topName,
       });
@@ -115,7 +115,7 @@ export default function IndustryHeatmap({ stocks }: Props) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 2 }}>
                 <span style={{ fontSize: 10, color: c.textMuted }}>最高分</span>
                 <span style={{ fontSize: 11, color: c.textSecondary }}>
-                  {g.topStock} {g.topStockName} ({g.avgScore})
+                  {g.topStock} {g.topStockName} ({g.topScore})
                 </span>
               </div>
             </div>
