@@ -129,6 +129,40 @@ const INDICES = [
   { symbol: 'ES=F', name: 'S&P 期貨' },
 ];
 
+// ── TAIFEX Futures ──
+
+export interface TaifexQuote {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  changePct: number;
+  time: string;
+  session: string; // 'day' | 'night'
+}
+
+export async function fetchTaifex(): Promise<TaifexQuote | null> {
+  try {
+    const data = await fetchJSON<{
+      symbol?: string; name?: string; price?: number;
+      change?: number; changePct?: number; time?: string; session?: string;
+      error?: string;
+    }>('/api/taifex');
+    if (data.error || !data.price) return null;
+    return {
+      symbol: data.symbol ?? 'TX',
+      name: data.session === 'night' ? '台指夜盤' : '台指期貨',
+      price: data.price,
+      change: data.change ?? 0,
+      changePct: data.changePct ?? 0,
+      time: data.time ?? '',
+      session: data.session ?? 'day',
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchIndices(): Promise<IndexQuote[]> {
   const results: IndexQuote[] = [];
   const promises = INDICES.map(async (idx) => {

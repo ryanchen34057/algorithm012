@@ -1,17 +1,23 @@
 import { useEffect, useState } from 'react';
-import { fetchIndices, IndexQuote } from '../services/api';
+import { fetchIndices, fetchTaifex, IndexQuote, TaifexQuote } from '../services/api';
 import { useColors } from './ThemeContext';
 
 export default function MarketOverview() {
   const c = useColors();
   const [indices, setIndices] = useState<IndexQuote[]>([]);
+  const [taifex, setTaifex] = useState<TaifexQuote | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    fetchIndices()
-      .then(setIndices)
-      .catch(() => {})
+    Promise.all([
+      fetchIndices().catch(() => [] as IndexQuote[]),
+      fetchTaifex().catch(() => null),
+    ])
+      .then(([idx, tx]) => {
+        setIndices(idx);
+        setTaifex(tx);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -73,6 +79,38 @@ export default function MarketOverview() {
             </div>
           );
         })}
+
+        {/* TAIFEX futures (台指期貨/夜盤) */}
+        {taifex && (() => {
+          const isUp = taifex.changePct > 0;
+          const isDown = taifex.changePct < 0;
+          const color = isUp ? c.up : isDown ? c.down : c.textMuted;
+          const bg = isUp ? c.up + '12' : isDown ? c.down + '12' : c.textMuted + '08';
+          return (
+            <div style={{
+              background: bg, borderRadius: 8, padding: '8px 10px',
+              display: 'flex', flexDirection: 'column', gap: 2,
+              border: `1px solid ${isUp ? c.up + '30' : isDown ? c.down + '30' : c.border}`,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{taifex.name}</span>
+                <span style={{ fontSize: 10, color: c.textMuted }}>{taifex.time}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color }}>
+                  {taifex.price.toLocaleString()}
+                </span>
+                <span style={{
+                  fontSize: 12, fontWeight: 700, color,
+                  padding: '1px 5px', borderRadius: 3,
+                  background: isUp ? c.up + '20' : isDown ? c.down + '20' : 'transparent',
+                }}>
+                  {taifex.changePct > 0 ? '+' : ''}{taifex.changePct}%
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
