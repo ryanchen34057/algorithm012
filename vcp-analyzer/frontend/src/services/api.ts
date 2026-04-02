@@ -1,7 +1,7 @@
 // Frontend-only API: fetches data via Vercel serverless proxies,
 // then runs analysis in the browser.
 
-import { BullPickAnalysis, BullPickScanResult, MarketStatus, StockChartData, OHLCV } from '../types';
+import { BullPickAnalysis, BullPickScanResult, MarketStatus, StockChartData, OHLCV, IndustrySector } from '../types';
 import { analyze, parseYahooChart, BullPickParams, InstitutionEntry, RevenueEntry } from './scanner';
 
 // ── Stock code → industry classification (fallback when API unavailable) ──
@@ -437,8 +437,6 @@ export async function getChart(symbol: string, interval: ChartInterval = '1d'): 
 
 // ── Compute Industry Sectors from ALL stocks ──
 
-import { IndustrySector } from '../types';
-
 function computeIndustrySectors(
   stocks: StockListItem[],
   instMap: Record<string, InstitutionEntry>,
@@ -471,9 +469,9 @@ function computeIndustrySectors(
     // Institution data (in 張 = lots)
     const inst = instMap[s.symbol];
     if (inst) {
-      const foreignLots = (inst.foreignBuy - inst.foreignSell) / 1000;
-      const trustLots = (inst.trustBuy - inst.trustSell) / 1000;
-      const totalLots = foreignLots + trustLots;
+      const foreignLots = inst.foreignNetBuy;
+      const trustLots = inst.trustNetBuy;
+      const totalLots = inst.totalNetBuy;
       g.foreignNet += foreignLots;
       g.trustNet += trustLots;
       g.totalNet += totalLots;
