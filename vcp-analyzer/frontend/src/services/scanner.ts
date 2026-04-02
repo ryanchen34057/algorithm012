@@ -1,5 +1,5 @@
 // Browser-side Bull Pick analysis logic (ported from Go backend)
-import type { BullPickAnalysis, PatternShapeType } from '../types';
+import type { BullPickAnalysis, PatternShapeType, ScoreBreakdown } from '../types';
 
 export interface OHLCV {
   date: string;
@@ -93,7 +93,7 @@ export function analyze(
   const revenuePeriod = revenue?.period ?? '';
 
   // Scoring
-  const score = calcBullPickScore(
+  const { score, breakdown: scoreBreakdown } = calcBullPickScore(
     pattern, maAligned, distHighPct, params.distHighMax,
     totalNetBuy, foreignNetBuy, trustNetBuy,
     revenueGrowth,
@@ -156,6 +156,7 @@ export function analyze(
     adv20: r2(adv20),
     todayVolume: today.volume,
     score,
+    scoreBreakdown,
   };
 }
 
@@ -236,29 +237,28 @@ function calcBullPickScore(
   totalNetBuy: number, foreignNetBuy: number, trustNetBuy: number,
   revenueGrowth: number,
   price: number, ma20: number, ma60: number,
-): number {
-  let score = 0;
-
+): { score: number; breakdown: ScoreBreakdown } {
   // ① Pattern (0-20)
-  if (pattern === 'cup') score += 20;
-  else if (pattern === 'u_shape') score += 17;
-  else if (pattern === 'n_shape') score += 14;
-  else score += 5;
+  let patternScore = 5;
+  if (pattern === 'cup') patternScore = 20;
+  else if (pattern === 'u_shape') patternScore = 17;
+  else if (pattern === 'n_shape') patternScore = 14;
 
   // ② MA alignment (0-15)
-  if (maAligned) score += 15;
-  else if (price > ma20 && ma20 > ma60) score += 12;
-  else if (price > ma20) score += 8;
-  else if (price > ma60) score += 4;
+  let maScore = 0;
+  if (maAligned) maScore = 15;
+  else if (price > ma20 && ma20 > ma60) maScore = 12;
+  else if (price > ma20) maScore = 8;
+  else if (price > ma60) maScore = 4;
 
   // ③ Distance to high (0-20)
-  if (distHighPct <= 0) score += 20;
-  else if (distHighPct < 3) score += 18;
-  else if (distHighPct < 5) score += 16;
-  else if (distHighPct < distHighMax) score += 14;
-  else if (distHighPct < 15) score += 10;
-  else if (distHighPct < 20) score += 6;
-  else score += 2;
+  let distScore = 2;
+  if (distHighPct <= 0) distScore = 20;
+  else if (distHighPct < 3) distScore = 18;
+  else if (distHighPct < 5) distScore = 16;
+  else if (distHighPct < distHighMax) distScore = 14;
+  else if (distHighPct < 15) distScore = 10;
+  else if (distHighPct < 20) distScore = 6;
 
   // ④ Institutional buying (0-25)
   let instScore = 0;
@@ -275,18 +275,30 @@ function calcBullPickScore(
   else if (trustNetBuy > 50) instScore += 5;
   else if (trustNetBuy > 0) instScore += 3;
 
-  score += Math.min(instScore, 25);
+  instScore = Math.min(instScore, 25);
 
   // ⑤ Revenue growth (0-20)
-  if (revenueGrowth > 100) score += 20;
-  else if (revenueGrowth > 50) score += 17;
-  else if (revenueGrowth > 30) score += 14;
-  else if (revenueGrowth > 20) score += 12;
-  else if (revenueGrowth > 10) score += 9;
-  else if (revenueGrowth > 0) score += 5;
-  else if (revenueGrowth > -10) score += 2;
+  let revScore = 0;
+  if (revenueGrowth > 100) revScore = 20;
+  else if (revenueGrowth > 50) revScore = 17;
+  else if (revenueGrowth > 30) revScore = 14;
+  else if (revenueGrowth > 20) revScore = 12;
+  else if (revenueGrowth > 10) revScore = 9;
+  else if (revenueGrowth > 0) revScore = 5;
+  else if (revenueGrowth > -10) revScore = 2;
 
-  return Math.min(score, 100);
+  const total = Math.min(patternScore + maScore + distScore + instScore + revScore, 100);
+
+  return {
+    score: total,
+    breakdown: {
+      pattern: patternScore,
+      maAlign: maScore,
+      distHigh: distScore,
+      institutional: instScore,
+      revenue: revScore,
+    },
+  };
 }
 
 // ── Stop Loss ──

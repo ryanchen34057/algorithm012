@@ -76,7 +76,11 @@ export default function Dashboard() {
       {/* Header */}
       <div style={S.header}>
         <div>
-          <h1 style={{ ...S.title, color: c.text }}>台股強勢精選掃描系統</h1>
+          <h1 style={{ ...S.title, color: c.text }}>
+            <span style={{ background: 'linear-gradient(90deg, #f59e0b, #ef4444, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              台股強勢精選掃描系統
+            </span>
+          </h1>
           <p style={{ ...S.subtitle, color: c.textMuted }}>
             線型多頭 · 距歷史高點10%內 · 主力買超 · 年營收高成長
           </p>
@@ -122,14 +126,33 @@ export default function Dashboard() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ color: c.textSecondary, fontSize: 14, fontStyle: 'italic', lineHeight: 1.6 }}>
-          正在從 TWSE / TPEx 抓取上市櫃股票清單，逐一分析中，請耐心等待...
+        <div style={{
+          background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12,
+          padding: '16px 20px', lineHeight: 1.6,
+        }}>
+          <div style={{ color: c.textSecondary, fontSize: 14, fontWeight: 600 }}>
+            正在掃描全市場股票，尋找強勢標的...
+          </div>
           {progress.total > 0 && (
-            <div style={{ marginTop: 6 }}>
-              <div style={{ background: c.border, borderRadius: 4, height: 6, overflow: 'hidden', maxWidth: 400 }}>
-                <div style={{ background: c.blue, height: '100%', width: `${(progress.done / progress.total) * 100}%`, transition: 'width 0.3s' }} />
+            <div style={{ marginTop: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: c.textMuted }}>分析進度</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: c.blue }}>
+                  {Math.round((progress.done / progress.total) * 100)}%
+                </span>
               </div>
-              <span style={{ fontSize: 12, color: c.textMuted }}>{progress.done} / {progress.total}</span>
+              <div style={{ background: c.border, borderRadius: 6, height: 10, overflow: 'hidden' }}>
+                <div style={{
+                  background: 'linear-gradient(90deg, #3b82f6, #a855f7, #f59e0b)',
+                  height: '100%', borderRadius: 6,
+                  width: `${(progress.done / progress.total) * 100}%`,
+                  transition: 'width 0.3s ease',
+                  boxShadow: '0 0 8px #3b82f644',
+                }} />
+              </div>
+              <span style={{ fontSize: 11, color: c.textMuted, marginTop: 2, display: 'block' }}>
+                {progress.done} / {progress.total} 支股票
+              </span>
             </div>
           )}
         </div>
@@ -149,13 +172,50 @@ export default function Dashboard() {
 
       {/* Results summary */}
       {scannedAt && !loading && (
-        <div style={{ color: c.textDim, fontSize: 13 }}>
-          掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
-          {latestDate && <>&nbsp;·&nbsp;資料日期：<strong style={{ color: c.text }}>{latestDate}</strong></>}
-          &nbsp;·&nbsp;共分析 {totalScanned} 支，找到{' '}
-          <strong style={{ color: c.text }}>{stocks.length}</strong> 支強勢精選
-          &nbsp;&nbsp;
-          <DownloadCsvButton count={stocks.length} onDownload={() => downloadBullPickCsv(stocks)} />
+        <div style={{
+          background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10,
+          padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ color: c.textDim, fontSize: 13 }}>
+              掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
+              {latestDate && <>&nbsp;·&nbsp;資料日期：<strong style={{ color: c.text }}>{latestDate}</strong></>}
+            </div>
+            <DownloadCsvButton count={stocks.length} onDownload={() => downloadBullPickCsv(stocks)} />
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: c.text }}>
+              共 {totalScanned} 支 → 精選 <span style={{ color: '#f59e0b', fontSize: 18 }}>{stocks.length}</span> 支
+            </span>
+            {stocks.length > 0 && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[
+                  { label: 'SSS', min: 90, color: '#fbbf24' },
+                  { label: 'SS', min: 80, color: '#f59e0b' },
+                  { label: 'S', min: 70, color: '#ef4444' },
+                  { label: 'A', min: 60, color: '#a855f7' },
+                  { label: 'B', min: 50, color: '#3b82f6' },
+                ].map(({ label, min, color }) => {
+                  const count = stocks.filter(s => {
+                    if (min === 90) return s.score >= 90;
+                    if (min === 80) return s.score >= 80 && s.score < 90;
+                    if (min === 70) return s.score >= 70 && s.score < 80;
+                    if (min === 60) return s.score >= 60 && s.score < 70;
+                    return s.score >= 50 && s.score < 60;
+                  }).length;
+                  if (count === 0) return null;
+                  return (
+                    <span key={label} style={{
+                      fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 5,
+                      background: color + '20', color, border: `1px solid ${color}33`,
+                    }}>
+                      {label} x{count}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -213,7 +273,7 @@ function ScanActions({ loading, onScan, onReset }: { loading: boolean; onScan: (
   const c = useColors();
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginTop: 4 }}>
-      <button onClick={onScan} disabled={loading} style={{ ...S.scanBtn, background: c.blue, opacity: loading ? 0.7 : 1 }}>
+      <button onClick={onScan} disabled={loading} style={{ ...S.scanBtn, opacity: loading ? 0.7 : 1 }}>
         {loading ? (<><span style={S.spinner} />掃描中...</>) : '掃描全市場'}
       </button>
       <button onClick={onReset} style={{ ...S.resetBtn, borderColor: c.border, color: c.textSecondary }}>重設預設</button>
@@ -244,7 +304,7 @@ const S: Record<string, React.CSSProperties> = {
   filterGroup: { display: 'flex', flexDirection: 'column' as const, gap: 8 },
   filterGroupLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.06em' },
   filterGroupInputs: { display: 'flex', gap: 16, flexWrap: 'wrap' as const },
-  scanBtn: { display: 'flex', alignItems: 'center', gap: 8, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
+  scanBtn: { display: 'flex', alignItems: 'center', gap: 8, color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 16, fontWeight: 800, cursor: 'pointer', background: 'linear-gradient(135deg, #3b82f6, #a855f7)', boxShadow: '0 4px 14px #3b82f633', letterSpacing: '0.02em' },
   resetBtn: { background: 'transparent', border: '1px solid', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' },
   spinner: { display: 'inline-block', width: 14, height: 14, border: '2px solid #ffffff44', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
   empty: { textAlign: 'center', padding: '60px 0', fontSize: 15, lineHeight: 2 },

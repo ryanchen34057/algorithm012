@@ -304,6 +304,14 @@ export interface MAPullbackScanResult {
 
 // ── Bull Pick Scanner (強勢精選) ──
 
+export interface ScoreBreakdown {
+  pattern: number;       // 0-20
+  maAlign: number;       // 0-15
+  distHigh: number;      // 0-20
+  institutional: number; // 0-25
+  revenue: number;       // 0-20
+}
+
 export interface BullPickAnalysis {
   symbol: string;
   name: string;
@@ -340,6 +348,7 @@ export interface BullPickAnalysis {
   adv20: number;
   todayVolume: number;
   score: number;
+  scoreBreakdown: ScoreBreakdown;
 }
 
 export interface IndustrySector {
