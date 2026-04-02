@@ -253,8 +253,10 @@ export default function BullPickRow({ stock }: Props) {
 
             <InfoCard title="交易計畫" c={c}>
               <Metric label="停損" value={`${stock.stopLoss}`} color="#ef4444" sub={stock.stopLabel} />
-              <Metric label="T1 目標" value={`${stock.target}`} color="#22c55e" sub={stock.targetLabel} />
-              <Metric label="T2 目標" value={`${stock.target2}`} color="#16a34a" sub={stock.target2Label} />
+              <Metric label="T1 目標" value={`${stock.target}`} color="#22c55e" sub={stock.targetLabel}
+                tooltip={getT1Tooltip(stock.targetLabel)} />
+              <Metric label="T2 目標" value={`${stock.target2}`} color="#16a34a" sub={stock.target2Label}
+                tooltip={getT2Tooltip(stock.target2Label)} />
               <Metric label="風報比 (T1)" value={stock.rewardRisk > 0 ? `1 : ${stock.rewardRisk}` : '-'}
                 color={stock.rewardRisk >= 3 ? c.up : c.blue} />
             </InfoCard>
@@ -274,6 +276,26 @@ export default function BullPickRow({ stock }: Props) {
       )}
     </div>
   );
+}
+
+function getT1Tooltip(label: string): string {
+  if (label === '歷史高點')
+    return 'T1（保守目標）= 歷史最高價\n股價尚未突破前高，歷史高點為最直接的壓力位。\n適合分批出場，先在此位置賣出部分持股鎖定獲利。';
+  if (label === 'Fib 1.272')
+    return 'T1（保守目標）= Fibonacci 1.272 延伸\n股價已突破歷史高點，以近期低點到前高的波段幅度，\n乘以 1.272 倍投射上方目標。Fibonacci 延伸是技術分析常用的目標位。';
+  if (label === '2×ATR')
+    return 'T1（保守目標）= 現價 + 2 × ATR(20)\nATR = 平均真實波幅（20日），衡量股價每日波動幅度。\n2 倍 ATR 為短期合理的獲利空間。';
+  return 'T1 = 第一目標價（保守）';
+}
+
+function getT2Tooltip(label: string): string {
+  if (label === 'ATH + 1.5×ATR')
+    return 'T2（積極目標）= 歷史高點 + 1.5 × ATR(20)\n假設股價突破歷史高點後，再以波動率延伸 1.5 倍 ATR。\nATR 會根據每支股票的波動特性動態調整目標距離。';
+  if (label === 'Fib 1.618')
+    return 'T2（積極目標）= Fibonacci 1.618 延伸（黃金比例）\n又稱「黃金目標位」，是 Fibonacci 最經典的延伸比例。\n適合趨勢強勁時的持股目標，但不一定每次都會到達。';
+  if (label === '3×ATR')
+    return 'T2（積極目標）= 現價 + 3 × ATR(20)\n3 倍 ATR 為中期較積極的獲利目標。\n適合趨勢明確時繼續持有的參考。';
+  return 'T2 = 第二目標價（積極）';
 }
 
 function PositionCalculator({ stock, c }: { stock: BullPickAnalysis; c: ReturnType<typeof useColors> }) {
@@ -328,8 +350,10 @@ function PositionCalculator({ stock, c }: { stock: BullPickAnalysis; c: ReturnTy
           <ResultBox label="建議股數" value={`${shares} 股`} sub={`${Math.floor(shares / 1000)} 張 + ${shares % 1000} 股`} color={c.blue} c={c} />
           <ResultBox label="總成本" value={`$${totalCost.toLocaleString()}`} color={c.text} c={c} />
           <ResultBox label="最大損失" value={`-$${Math.round(maxLoss).toLocaleString()}`} color="#ef4444" c={c} />
-          <ResultBox label="T1 預估獲利" value={`+$${Math.round(profitT1).toLocaleString()}`} sub={`風報比 1:${rrT1.toFixed(1)}`} color="#22c55e" c={c} />
-          <ResultBox label="T2 預估獲利" value={`+$${Math.round(profitT2).toLocaleString()}`} sub={`風報比 1:${rrT2.toFixed(1)}`} color="#16a34a" c={c} />
+          <ResultBox label="T1 預估獲利" value={`+$${Math.round(profitT1).toLocaleString()}`} sub={`風報比 1:${rrT1.toFixed(1)}`} color="#22c55e" c={c}
+            tooltip={getT1Tooltip(stock.targetLabel)} />
+          <ResultBox label="T2 預估獲利" value={`+$${Math.round(profitT2).toLocaleString()}`} sub={`風報比 1:${rrT2.toFixed(1)}`} color="#16a34a" c={c}
+            tooltip={getT2Tooltip(stock.target2Label)} />
           <ResultBox label="每股風險" value={`$${riskPerShare.toFixed(1)}`} sub={`停損 ${stock.stopLoss}`} color="#f59e0b" c={c} />
         </div>
       ) : (
@@ -339,13 +363,14 @@ function PositionCalculator({ stock, c }: { stock: BullPickAnalysis; c: ReturnTy
   );
 }
 
-function ResultBox({ label, value, sub, color, c }: {
-  label: string; value: string; sub?: string; color: string; c: ReturnType<typeof useColors>;
+function ResultBox({ label, value, sub, color, c, tooltip }: {
+  label: string; value: string; sub?: string; color: string; c: ReturnType<typeof useColors>; tooltip?: string;
 }) {
   return (
-    <div style={{
+    <div title={tooltip} style={{
       background: color + '08', border: `1px solid ${color}22`, borderRadius: 8,
       padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2,
+      cursor: tooltip ? 'help' : undefined,
     }}>
       <span style={{ fontSize: 10, color: c.textMuted }}>{label}</span>
       <span style={{ fontSize: 15, fontWeight: 800, color }}>{value}</span>
@@ -368,13 +393,14 @@ function InfoCard({ title, c, children }: { title: string; c: ReturnType<typeof 
   );
 }
 
-function Metric({ label, value, color, sub, bold }: {
-  label: string; value: string; color?: string; sub?: string; bold?: boolean;
+function Metric({ label, value, color, sub, bold, tooltip }: {
+  label: string; value: string; color?: string; sub?: string; bold?: boolean; tooltip?: string;
 }) {
   const c = useColors();
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <span style={{ color: c.textMuted, fontSize: 11 }}>{label}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}
+      title={tooltip}>
+      <span style={{ color: c.textMuted, fontSize: 11, cursor: tooltip ? 'help' : undefined }}>{label}</span>
       <div style={{ textAlign: 'right' }}>
         <span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 14 : 12, color: color ?? c.text }}>{value}</span>
         {sub && <span style={{ color: c.textMuted, fontSize: 9, marginLeft: 3 }}>{sub}</span>}
