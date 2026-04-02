@@ -138,7 +138,15 @@ export async function fetchIndices(): Promise<IndexQuote[]> {
       if (!meta) return null;
 
       const price = meta.regularMarketPrice ?? 0;
-      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
+      // Use previousClose (yesterday's close), NOT chartPreviousClose (chart start date)
+      // Fallback: use second-to-last candle close from actual data
+      let prevClose = meta.previousClose ?? 0;
+      if (!prevClose) {
+        const closes = (data as any)?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
+        if (closes.length >= 2) {
+          prevClose = closes[closes.length - 2] ?? 0;
+        }
+      }
       const change = prevClose > 0 ? price - prevClose : 0;
       const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
 
