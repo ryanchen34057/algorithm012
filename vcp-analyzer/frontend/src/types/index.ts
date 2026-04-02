@@ -7,11 +7,19 @@ export interface OHLCV {
   volume: number;
 }
 
+export interface MALine {
+  data: number[];
+  color: string;
+  label: string;
+}
+
 export interface StockChartData {
   symbol: string;
   name: string;
   latestPrice: number;
   candles: OHLCV[];
+  maLines: MALine[];
+  // Legacy fields kept for compatibility
   ma20: number[];
   ma50: number[];
   ma150: number[];

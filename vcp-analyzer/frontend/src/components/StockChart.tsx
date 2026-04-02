@@ -98,18 +98,18 @@ export default function StockChart({ chart, gap, priceLines: customLines }: Prop
       }))
     );
 
-    // ── Moving averages ─────────────────────────────────────────────────
-    const maConfigs = [
-      { data: chart.ma20, color: '#22d3ee', title: 'MA20' },
-      { data: chart.ma50, color: '#f59e0b', title: 'MA50' },
-      { data: chart.ma150, color: '#a78bfa', title: 'MA150' },
-      { data: chart.ma200, color: '#f472b6', title: 'MA200' },
+    // ── Moving averages (dynamic per interval) ───────────────────────────
+    const maLines = chart.maLines ?? [
+      { data: chart.ma20, color: '#22d3ee', label: 'MA20' },
+      { data: chart.ma50, color: '#f59e0b', label: 'MA50' },
+      { data: chart.ma150, color: '#a78bfa', label: 'MA150' },
+      { data: chart.ma200, color: '#f472b6', label: 'MA200' },
     ];
-    for (const { data, color, title } of maConfigs) {
+    for (const { data, color, label } of maLines) {
       const maSeries = lc.addSeries(LineSeries, {
         color,
         lineWidth: 1,
-        title,
+        title: label,
         crosshairMarkerVisible: false,
         lastValueVisible: true,
         priceLineVisible: false,

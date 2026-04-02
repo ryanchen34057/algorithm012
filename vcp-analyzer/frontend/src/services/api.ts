@@ -409,6 +409,28 @@ export async function scanBullPick(
 
 export type ChartInterval = '1d' | '1wk' | '1mo';
 
+// MA configs per interval
+// 日線: 5MA(短期), 20MA(月線), 60MA(季線), 200MA(年線)
+// 週線: 5MA(月線), 20MA(半年線), 60MA(年線)
+// 月線: 5MA(季線), 20MA(年線)
+const MA_CONFIGS: Record<ChartInterval, { period: number; color: string; label: string }[]> = {
+  '1d': [
+    { period: 5, color: '#22d3ee', label: '5MA' },
+    { period: 20, color: '#f59e0b', label: '20MA' },
+    { period: 60, color: '#a78bfa', label: '60MA' },
+    { period: 200, color: '#f472b6', label: '200MA' },
+  ],
+  '1wk': [
+    { period: 5, color: '#22d3ee', label: '5MA' },
+    { period: 20, color: '#f59e0b', label: '20MA' },
+    { period: 60, color: '#a78bfa', label: '60MA' },
+  ],
+  '1mo': [
+    { period: 5, color: '#22d3ee', label: '5MA' },
+    { period: 20, color: '#f59e0b', label: '20MA' },
+  ],
+};
+
 export async function getChart(symbol: string, interval: ChartInterval = '1d'): Promise<StockChartData> {
   const data = await fetchJSON<Record<string, unknown>>(`/api/chart?symbol=${encodeURIComponent(symbol)}&interval=${interval}`);
   const candles = parseYahooChart(data, symbol, '');
@@ -418,6 +440,15 @@ export async function getChart(symbol: string, interval: ChartInterval = '1d'): 
   const name = meta?.shortName ?? meta?.symbol ?? symbol;
 
   const closes = candles.map((c) => c.close);
+
+  // Build MA lines based on interval
+  const maLines = MA_CONFIGS[interval].map(({ period, color, label }) => ({
+    data: calcMAArray(closes, period),
+    color,
+    label,
+  }));
+
+  // Legacy fields (for analyze() compatibility)
   const ma20 = calcMAArray(closes, 20);
   const ma50 = calcMAArray(closes, 50);
   const ma150 = calcMAArray(closes, 150);
@@ -428,6 +459,7 @@ export async function getChart(symbol: string, interval: ChartInterval = '1d'): 
     name,
     latestPrice: candles[candles.length - 1]?.close ?? 0,
     candles,
+    maLines,
     ma20,
     ma50,
     ma150,
