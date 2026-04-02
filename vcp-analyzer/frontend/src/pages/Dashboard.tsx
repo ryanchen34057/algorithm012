@@ -81,6 +81,14 @@ export default function Dashboard() {
         <ThemeToggle />
       </div>
 
+      {/* Notice */}
+      <div style={{
+        background: '#f59e0b15', border: '1px solid #f59e0b33', borderRadius: 8,
+        padding: '8px 14px', fontSize: 13, color: '#f59e0b',
+      }}>
+        本系統只顯示最新的盤後收盤資料，不是即時報價。建議於收盤後（下午 2:00 後）使用。
+      </div>
+
       {/* Filter bar */}
       <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
         <div style={S.filterGroup}>
