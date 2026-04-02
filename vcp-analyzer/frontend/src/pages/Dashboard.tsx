@@ -76,11 +76,7 @@ export default function Dashboard() {
       {/* Header */}
       <div style={S.header}>
         <div>
-          <h1 style={{ ...S.title, color: c.text }}>
-            <span style={{ background: 'linear-gradient(90deg, #f59e0b, #ef4444, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              台股強勢精選掃描系統
-            </span>
-          </h1>
+          <h1 style={{ ...S.title, color: c.text }}>台股強勢精選掃描系統</h1>
           <p style={{ ...S.subtitle, color: c.textMuted }}>
             線型多頭 · 距歷史高點10%內 · 主力買超 · 年營收高成長
           </p>
