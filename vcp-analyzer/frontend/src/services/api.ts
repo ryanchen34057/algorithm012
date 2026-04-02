@@ -287,6 +287,10 @@ export async function scanBullPick(
   }
   console.log(`[scanner] ${total} stocks loaded (TWSE+TPEx), institution: ${Object.keys(instMap).length}`, stockListRes.debug);
 
+  // Compute industry sectors from ALL stocks (not just filtered)
+  const industries = computeIndustrySectors(stocks, instMap, indMap);
+  console.log(`[scanner] ${industries.length} industry sectors computed`);
+
   // Step 2: Fetch charts in batches and analyze
   const BATCH_SIZE = 8;
   const results: BullPickAnalysis[] = [];
@@ -393,6 +397,7 @@ export async function scanBullPick(
   return {
     stocks: results,
     market: market ?? { indexPrice: 0, ma20: 0, ma60: 0, ma120: 0, trend: 'neutral', trendLabel: '無資料' },
+    industries,
     scannedAt: new Date().toISOString(),
     total: results.length,
     scanned: total,
@@ -426,6 +431,77 @@ export async function getChart(symbol: string): Promise<StockChartData> {
     ma150,
     ma200,
   };
+}
+
+// ── Compute Industry Sectors from ALL stocks ──
+
+import { IndustrySector } from '../types';
+
+function computeIndustrySectors(
+  stocks: StockListItem[],
+  instMap: Record<string, InstitutionEntry>,
+  indMap: Record<string, { industry: string; concept: string }>,
+): IndustrySector[] {
+  const map = new Map<string, {
+    count: number;
+    changes: number[];
+    foreignNet: number;
+    trustNet: number;
+    totalNet: number;
+    topBuyAmount: number;
+    topBuySymbol: string;
+    topBuyName: string;
+  }>();
+
+  for (const s of stocks) {
+    const code = s.symbol.replace(/\.(TW|TWO)$/, '');
+    const ind = indMap[s.symbol];
+    const industry = ind?.industry || classifyByCode(code);
+
+    let g = map.get(industry);
+    if (!g) {
+      g = { count: 0, changes: [], foreignNet: 0, trustNet: 0, totalNet: 0, topBuyAmount: 0, topBuySymbol: '', topBuyName: '' };
+      map.set(industry, g);
+    }
+
+    g.count++;
+
+    // Institution data (in 張 = lots)
+    const inst = instMap[s.symbol];
+    if (inst) {
+      const foreignLots = (inst.foreignBuy - inst.foreignSell) / 1000;
+      const trustLots = (inst.trustBuy - inst.trustSell) / 1000;
+      const totalLots = foreignLots + trustLots;
+      g.foreignNet += foreignLots;
+      g.trustNet += trustLots;
+      g.totalNet += totalLots;
+
+      if (totalLots > g.topBuyAmount) {
+        g.topBuyAmount = totalLots;
+        g.topBuySymbol = code;
+        g.topBuyName = s.name;
+      }
+    }
+  }
+
+  const result: IndustrySector[] = [];
+  for (const [industry, g] of map) {
+    result.push({
+      industry,
+      stockCount: g.count,
+      avgChangePct: 0, // We don't have change% for all stocks without chart data
+      totalNetBuy: Math.round(g.totalNet),
+      foreignNetBuy: Math.round(g.foreignNet),
+      trustNetBuy: Math.round(g.trustNet),
+      topBuyStock: g.topBuySymbol,
+      topBuyStockName: g.topBuyName,
+      topBuyAmount: Math.round(g.topBuyAmount),
+    });
+  }
+
+  // Sort by absolute total net buy descending (show where money is flowing)
+  result.sort((a, b) => Math.abs(b.totalNetBuy) - Math.abs(a.totalNetBuy));
+  return result;
 }
 
 function calcMAArray(data: number[], period: number): number[] {

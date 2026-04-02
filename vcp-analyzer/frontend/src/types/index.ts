@@ -334,9 +334,22 @@ export interface BullPickAnalysis {
   score: number;
 }
 
+export interface IndustrySector {
+  industry: string;
+  stockCount: number;
+  avgChangePct: number;
+  totalNetBuy: number;      // 三大法人合計（張）
+  foreignNetBuy: number;    // 外資合計（張）
+  trustNetBuy: number;      // 投信合計（張）
+  topBuyStock: string;      // 法人買超最多的個股
+  topBuyStockName: string;
+  topBuyAmount: number;
+}
+
 export interface BullPickScanResult {
   stocks: BullPickAnalysis[];
   market: MarketStatus;
+  industries: IndustrySector[];
   scannedAt: string;
   total: number;
   scanned: number;

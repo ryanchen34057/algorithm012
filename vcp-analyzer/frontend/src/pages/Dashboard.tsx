@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { scanBullPick } from '../services/api';
-import { BullPickAnalysis, MarketStatus } from '../types';
+import { BullPickAnalysis, MarketStatus, IndustrySector } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import BullPickRow from '../components/BullPickRow';
@@ -28,6 +28,7 @@ export default function Dashboard() {
   // ── Bull Pick state ──
   const [stocks, setStocks] = useState<BullPickAnalysis[]>([]);
   const [market, setMarket] = useState<MarketStatus | null>(null);
+  const [industries, setIndustries] = useState<IndustrySector[]>([]);
   const [filter, setFilter] = useState<BullPickFilter>({ ...BULL_PICK_DEFAULTS });
 
   // ── Shared state ──
@@ -54,6 +55,7 @@ export default function Dashboard() {
       );
       setStocks(result.stocks ?? []);
       setMarket(result.market ?? null);
+      setIndustries(result.industries ?? []);
       setScannedAt(result.scannedAt);
       setTotalScanned(result.scanned);
       setLatestDate(result.latestDate ?? '');
@@ -158,7 +160,7 @@ export default function Dashboard() {
       )}
 
       {/* Industry heatmap */}
-      <IndustryHeatmap stocks={stocks} />
+      <IndustryHeatmap industries={industries} />
 
       {/* Stock cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
