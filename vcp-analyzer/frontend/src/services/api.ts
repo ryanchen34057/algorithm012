@@ -407,8 +407,10 @@ export async function scanBullPick(
 
 // ── Chart fetcher for BullPickRow ──
 
-export async function getChart(symbol: string): Promise<StockChartData> {
-  const data = await fetchJSON<Record<string, unknown>>(`/api/chart?symbol=${encodeURIComponent(symbol)}`);
+export type ChartInterval = '1d' | '1wk' | '1mo';
+
+export async function getChart(symbol: string, interval: ChartInterval = '1d'): Promise<StockChartData> {
+  const data = await fetchJSON<Record<string, unknown>>(`/api/chart?symbol=${encodeURIComponent(symbol)}&interval=${interval}`);
   const candles = parseYahooChart(data, symbol, '');
   if (!candles) throw new Error('No chart data');
 

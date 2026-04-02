@@ -54,8 +54,10 @@ export default function StockChart({ chart, gap, priceLines: customLines }: Prop
         horzLines: { color: c.gridLine },
       },
       width: containerRef.current.clientWidth,
-      height: 420,
+      height: window.innerWidth < 640 ? 300 : 420,
       timeScale: { borderColor: c.border },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     });
     chartRef.current = lc;
 

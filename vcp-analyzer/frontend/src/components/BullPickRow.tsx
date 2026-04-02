@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getChart } from '../services/api';
+import { getChart, ChartInterval } from '../services/api';
 import { StockChartData, BullPickAnalysis } from '../types';
 import { useColors } from './ThemeContext';
 import StockChart, { PriceLine } from './StockChart';
@@ -8,16 +8,23 @@ interface Props {
   stock: BullPickAnalysis;
 }
 
+const TABS: { key: ChartInterval; label: string }[] = [
+  { key: '1d', label: '日' },
+  { key: '1wk', label: '週' },
+  { key: '1mo', label: '月' },
+];
 
 export default function BullPickRow({ stock }: Props) {
   const c = useColors();
   const [chart, setChart] = useState<StockChartData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [interval, setInterval] = useState<ChartInterval>('1d');
 
   useEffect(() => {
     setLoading(true);
-    getChart(stock.symbol).then(setChart).catch(() => {}).finally(() => setLoading(false));
-  }, [stock.symbol]);
+    setChart(null);
+    getChart(stock.symbol, interval).then(setChart).catch(() => {}).finally(() => setLoading(false));
+  }, [stock.symbol, interval]);
 
   const code = stock.symbol.replace(/\.(TW|TWO)$/, '');
   const market = stock.market === '上櫃' ? '櫃' : '市';
@@ -36,16 +43,54 @@ export default function BullPickRow({ stock }: Props) {
       background: c.bgCard, borderRadius: 10, overflow: 'hidden',
       border: `1px solid ${c.border}`,
     }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      {/* Header - responsive */}
+      <div style={{ padding: '12px 16px' }}>
+        {/* Top line: code + name + score */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0, flex: 1 }}>
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: '1px 4px', borderRadius: 3, flexShrink: 0,
+              background: market === '櫃' ? '#8b5cf622' : '#3b82f622',
+              color: market === '櫃' ? '#8b5cf6' : '#3b82f6',
+            }}>{market === '櫃' ? '上櫃' : '上市'}</span>
+            <span style={{ fontWeight: 800, fontSize: 20, color: c.text, letterSpacing: '0.02em' }}>{code}</span>
+            <span style={{ color: c.textSecondary, fontSize: 14 }}>{stock.name}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {stock.pattern !== 'none' && (
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                background: '#a78bfa22', color: '#a78bfa',
+              }}>{stock.patternLabel}</span>
+            )}
+            {stock.maAligned && (
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                background: c.up + '18', color: c.up,
+              }}>多頭排列</span>
+            )}
+            <div style={{
+              background: scoreColor + '18', color: scoreColor,
+              borderRadius: 6, padding: '3px 10px', fontWeight: 800, fontSize: 16,
+              minWidth: 42, textAlign: 'center',
+            }}>{stock.score.toFixed(0)}</div>
+          </div>
+        </div>
+
+        {/* Second line: price + change + tags */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
           <span style={{
-            fontSize: 10, fontWeight: 700, padding: '1px 4px', borderRadius: 3,
-            background: market === '櫃' ? '#8b5cf622' : '#3b82f622',
-            color: market === '櫃' ? '#8b5cf6' : '#3b82f6',
-          }}>{market === '櫃' ? '上櫃' : '上市'}</span>
-          <span style={{ fontWeight: 800, fontSize: 22, color: c.text, letterSpacing: '0.02em' }}>{code}</span>
-          <span style={{ color: c.textSecondary, fontSize: 15 }}>{stock.name}</span>
+            fontSize: 20, fontWeight: 800, letterSpacing: '-0.01em',
+            color: stock.changePct > 0 ? c.up : stock.changePct < 0 ? c.down : c.text,
+          }}>{stock.currentPrice}</span>
+          <span style={{
+            fontSize: 12, fontWeight: 700,
+            padding: '2px 6px', borderRadius: 4,
+            background: stock.changePct > 0 ? c.up + '18' : stock.changePct < 0 ? c.down + '18' : c.textMuted + '18',
+            color: stock.changePct > 0 ? c.up : stock.changePct < 0 ? c.down : c.textMuted,
+          }}>
+            {stock.changePct > 0 ? '+' : ''}{stock.changePct}%
+          </span>
           {stock.industry && (
             <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3, background: c.blue + '15', color: c.blue }}>
               {stock.industry}
@@ -57,54 +102,39 @@ export default function BullPickRow({ stock }: Props) {
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{
-              fontSize: 22, fontWeight: 800, letterSpacing: '-0.01em',
-              color: stock.changePct > 0 ? c.up : stock.changePct < 0 ? c.down : c.text,
-            }}>{stock.currentPrice}</span>
-            <span style={{
-              fontSize: 13, fontWeight: 700, marginLeft: 6,
-              padding: '2px 6px', borderRadius: 4,
-              background: stock.changePct > 0 ? c.up + '18' : stock.changePct < 0 ? c.down + '18' : c.textMuted + '18',
-              color: stock.changePct > 0 ? c.up : stock.changePct < 0 ? c.down : c.textMuted,
-            }}>
-              {stock.changePct > 0 ? '+' : ''}{stock.changePct}%
-            </span>
-          </div>
-          {stock.pattern !== 'none' && (
-            <span style={{
-              fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-              background: '#a78bfa22', color: '#a78bfa',
-            }}>{stock.patternLabel}</span>
-          )}
-          {stock.maAligned && (
-            <span style={{
-              fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-              background: c.up + '18', color: c.up,
-            }}>多頭排列</span>
-          )}
-          <div style={{
-            background: scoreColor + '18', color: scoreColor,
-            borderRadius: 6, padding: '4px 12px', fontWeight: 800, fontSize: 18,
-            minWidth: 50, textAlign: 'center',
-          }}>{stock.score.toFixed(0)}</div>
-        </div>
       </div>
 
       {/* Body */}
-      <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Chart Timeframe Tabs */}
+        <div style={{ display: 'flex', gap: 0, borderRadius: 6, overflow: 'hidden', border: `1px solid ${c.border}`, alignSelf: 'flex-start' }}>
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setInterval(tab.key)}
+              style={{
+                padding: '6px 18px', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
+                background: interval === tab.key ? c.blue : 'transparent',
+                color: interval === tab.key ? '#fff' : c.textSecondary,
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Chart */}
         {loading ? (
-          <div style={{ color: c.textMuted, padding: '40px 0', textAlign: 'center', fontSize: 14 }}>載入線圖中...</div>
+          <div style={{ color: c.textMuted, padding: '30px 0', textAlign: 'center', fontSize: 13 }}>載入線圖中...</div>
         ) : chart ? (
-          <StockChart chart={chart} priceLines={lines} />
+          <StockChart chart={chart} priceLines={interval === '1d' ? lines : []} />
         ) : (
-          <div style={{ color: c.textMuted, padding: '40px 0', textAlign: 'center', fontSize: 14 }}>無法載入線圖</div>
+          <div style={{ color: c.textMuted, padding: '30px 0', textAlign: 'center', fontSize: 13 }}>無法載入線圖</div>
         )}
 
         {/* 4 indicator groups */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
           {/* 距歷史高 */}
           <InfoCard title="距歷史高點" c={c}>
             <Metric label="歷史最高" value={`${stock.allTimeHigh}`} color={c.text} />
@@ -147,7 +177,7 @@ export default function BullPickRow({ stock }: Props) {
         </div>
 
         {/* MA row */}
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <MiniTag label="MA20" value={stock.ma20} price={stock.currentPrice} c={c} />
           <MiniTag label="MA60" value={stock.ma60} price={stock.currentPrice} c={c} />
           {stock.ma120 > 0 && <MiniTag label="MA120" value={stock.ma120} price={stock.currentPrice} c={c} />}
@@ -162,9 +192,9 @@ function InfoCard({ title, c, children }: { title: string; c: ReturnType<typeof 
   return (
     <div style={{
       background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 8,
-      padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6,
+      padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 5,
     }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: c.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.03em' }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.03em' }}>
         {title}
       </span>
       {children}
@@ -178,10 +208,10 @@ function Metric({ label, value, color, sub, bold }: {
   const c = useColors();
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <span style={{ color: c.textMuted, fontSize: 12 }}>{label}</span>
+      <span style={{ color: c.textMuted, fontSize: 11 }}>{label}</span>
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 15 : 13, color: color ?? c.text }}>{value}</span>
-        {sub && <span style={{ color: c.textMuted, fontSize: 10, marginLeft: 4 }}>{sub}</span>}
+        <span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 14 : 12, color: color ?? c.text }}>{value}</span>
+        {sub && <span style={{ color: c.textMuted, fontSize: 9, marginLeft: 3 }}>{sub}</span>}
       </div>
     </div>
   );
@@ -198,7 +228,7 @@ function MiniTag({ label, value, price, c }: { label: string; value: number; pri
   const above = price >= value;
   return (
     <span style={{
-      fontSize: 11, padding: '2px 6px', borderRadius: 3,
+      fontSize: 10, padding: '2px 5px', borderRadius: 3,
       background: above ? c.up + '15' : c.down + '15',
       color: above ? c.up : c.down,
     }}>
