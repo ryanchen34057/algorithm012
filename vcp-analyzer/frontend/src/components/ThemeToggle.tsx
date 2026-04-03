@@ -1,23 +1,15 @@
-import { useTheme } from './ThemeContext';
+import { useTheme, useColors } from './ThemeContext';
 
 export default function ThemeToggle() {
   const { theme, toggle } = useTheme();
+  const c = useColors();
   return (
-    <button onClick={toggle} style={styles.btn} title="切換深色/淺色模式">
-      {theme === 'dark' ? '☀️' : '🌙'} {theme === 'dark' ? '淺色模式' : '深色模式'}
+    <button onClick={toggle} style={{
+      background: 'transparent', border: `1px solid ${c.border}`,
+      borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 600,
+      cursor: 'pointer', color: c.textSecondary, whiteSpace: 'nowrap',
+    }} title="切換深色/淺色模式">
+      {theme === 'dark' ? '淺色模式' : '深色模式'}
     </button>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  btn: {
-    background: 'transparent',
-    border: '1px solid #64748b',
-    borderRadius: 6,
-    padding: '6px 14px',
-    fontSize: 13,
-    cursor: 'pointer',
-    color: 'inherit',
-    whiteSpace: 'nowrap',
-  },
-};

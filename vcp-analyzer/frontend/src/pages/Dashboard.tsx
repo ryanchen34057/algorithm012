@@ -22,16 +22,21 @@ const BULL_PICK_DEFAULTS: BullPickFilter = {
   distHighMax: 10, minScore: 40,
 };
 
+const RANK_TIERS = [
+  { label: 'SSS', min: 90, max: 101, color: '#e5a100' },
+  { label: 'SS', min: 80, max: 90, color: '#d97706' },
+  { label: 'S', min: 70, max: 80, color: '#ef4444' },
+  { label: 'A', min: 60, max: 70, color: '#8b6cc1' },
+  { label: 'B', min: 50, max: 60, color: '#6889ff' },
+];
+
 export default function Dashboard() {
   const c = useColors();
 
-  // ── Bull Pick state ──
   const [stocks, setStocks] = useState<BullPickAnalysis[]>([]);
   const [market, setMarket] = useState<MarketStatus | null>(null);
   const [industries, setIndustries] = useState<IndustrySector[]>([]);
   const [filter, setFilter] = useState<BullPickFilter>({ ...BULL_PICK_DEFAULTS });
-
-  // ── Shared state ──
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [scannedAt, setScannedAt] = useState('');
@@ -39,7 +44,6 @@ export default function Dashboard() {
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [latestDate, setLatestDate] = useState('');
 
-  // ── Handlers ──
   const handleScan = async () => {
     setLoading(true);
     setError('');
@@ -67,18 +71,27 @@ export default function Dashboard() {
     }
   };
 
-  const handleReset = () => {
-    setFilter({ ...BULL_PICK_DEFAULTS });
-  };
+  const handleReset = () => setFilter({ ...BULL_PICK_DEFAULTS });
+
+  const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
 
   return (
-    <div style={{ ...S.page, background: c.bg }}>
+    <div style={{
+      maxWidth: 1100, margin: '0 auto', padding: '40px 20px',
+      display: 'flex', flexDirection: 'column', gap: 20,
+      minHeight: '100vh',
+    }}>
       {/* Header */}
-      <div style={S.header}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ ...S.title, color: c.text }}>台股強勢精選掃描系統</h1>
-          <p style={{ ...S.subtitle, color: c.textMuted }}>
-            線型多頭 · 距歷史高點10%內 · 主力買超 · 年營收高成長
+          <h1 style={{
+            margin: 0, fontSize: 26, fontWeight: 900, color: c.text,
+            letterSpacing: '-0.03em', lineHeight: 1.2,
+          }}>
+            台股強勢精選
+          </h1>
+          <p style={{ margin: '6px 0 0', fontSize: 13, color: c.textMuted, lineHeight: 1.6 }}>
+            線型多頭 · 距歷史高點 10% 內 · 主力買超 · 年營收高成長
           </p>
         </div>
         <ThemeToggle />
@@ -86,69 +99,83 @@ export default function Dashboard() {
 
       {/* Notice */}
       <div style={{
-        background: '#f59e0b15', border: '1px solid #f59e0b33', borderRadius: 8,
-        padding: '8px 14px', fontSize: 13, color: '#f59e0b',
+        background: c.yellow + '0c', borderLeft: `3px solid ${c.yellow}`,
+        padding: '8px 14px', fontSize: 12, color: c.textSecondary, lineHeight: 1.6,
       }}>
         本系統只顯示最新的盤後收盤資料，不是即時報價。建議於收盤後（下午 2:00 後）使用。
       </div>
 
-      {/* Global indices & futures */}
+      {/* Global indices */}
       <MarketOverview />
 
       {/* Filter bar */}
-      <div style={{ ...S.filterBar, background: c.bgCard, borderColor: c.border }}>
-        <div style={S.filterGroup}>
-          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>價格 & 成交量</span>
-          <div style={S.filterGroupInputs}>
-            <FilterInput label="最低股價（元）" value={filter.minPrice} onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))} hint="建議 15+" />
-            <FilterInput label="最高股價（元）" value={filter.maxPrice} onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))} hint="不限" />
-            <FilterInput label="最低日均量（張）" value={filter.minVolume} onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))} hint="ADV20, 建議 300+" />
-          </div>
+      <div style={{
+        background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10,
+        padding: 16, display: 'flex', flexDirection: 'column', gap: 16,
+      }}>
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+          <FilterGroup label="價格 & 成交量">
+            <FilterInput label="最低股價" value={filter.minPrice} onChange={(v) => setFilter((f) => ({ ...f, minPrice: v }))} hint="建議 15+" c={c} />
+            <FilterInput label="最高股價" value={filter.maxPrice} onChange={(v) => setFilter((f) => ({ ...f, maxPrice: v }))} hint="不限" c={c} />
+            <FilterInput label="最低日均量（張）" value={filter.minVolume} onChange={(v) => setFilter((f) => ({ ...f, minVolume: v }))} hint="ADV20" c={c} />
+          </FilterGroup>
+          <FilterGroup label="篩選條件">
+            <FilterInput label="距高點上限 %" value={filter.distHighMax} onChange={(v) => setFilter((f) => ({ ...f, distHighMax: v }))} hint="建議 10" c={c} />
+            <FilterInput label="最低分數" value={filter.minScore} onChange={(v) => setFilter((f) => ({ ...f, minScore: v }))} hint="0-100" c={c} />
+          </FilterGroup>
         </div>
-        <div style={S.filterGroup}>
-          <span style={{ ...S.filterGroupLabel, color: c.textMuted }}>篩選條件</span>
-          <div style={S.filterGroupInputs}>
-            <FilterInput label="距歷史高點上限（%）" value={filter.distHighMax} onChange={(v) => setFilter((f) => ({ ...f, distHighMax: v }))} hint="建議 10" />
-            <FilterInput label="最低分數" value={filter.minScore} onChange={(v) => setFilter((f) => ({ ...f, minScore: v }))} hint="0-100, 建議 40" />
-          </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button onClick={handleScan} disabled={loading} style={{
+            background: c.accent, color: '#141118', border: 'none', borderRadius: 8,
+            padding: '10px 28px', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+            opacity: loading ? 0.7 : 1, letterSpacing: '0.01em',
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            {loading ? (<><span style={{
+              display: 'inline-block', width: 14, height: 14,
+              border: '2px solid #14111844', borderTopColor: '#141118',
+              borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+            }} />掃描中...</>) : '掃描全市場'}
+          </button>
+          <button onClick={handleReset} style={{
+            background: 'transparent', border: `1px solid ${c.border}`,
+            borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', color: c.textSecondary,
+          }}>重設</button>
         </div>
-        <ScanActions loading={loading} onScan={handleScan} onReset={handleReset} />
       </div>
 
       {/* Error */}
       {error && (
-        <div style={{ background: '#7f1d1d', color: '#fca5a5', padding: '12px 16px', borderRadius: 6, fontSize: 14 }}>{error}</div>
+        <div style={{
+          background: '#ef44440c', borderLeft: '3px solid #ef4444',
+          color: '#ef4444', padding: '10px 14px', fontSize: 13,
+        }}>{error}</div>
       )}
 
       {/* Loading */}
       {loading && (
         <div style={{
-          background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12,
-          padding: '16px 20px', lineHeight: 1.6,
+          background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10,
+          padding: 16, display: 'flex', flexDirection: 'column', gap: 10,
         }}>
-          <div style={{ color: c.textSecondary, fontSize: 14, fontWeight: 600 }}>
-            正在掃描全市場股票，尋找強勢標的...
+          <div style={{ color: c.textSecondary, fontSize: 13, fontWeight: 600 }}>
+            正在掃描全市場股票...
           </div>
           {progress.total > 0 && (
-            <div style={{ marginTop: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 12, color: c.textMuted }}>分析進度</span>
-                <span style={{ fontSize: 13, fontWeight: 800, color: c.blue }}>
-                  {Math.round((progress.done / progress.total) * 100)}%
-                </span>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: c.textMuted }}>{progress.done} / {progress.total}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: c.accent }}>{pct}%</span>
               </div>
-              <div style={{ background: c.border, borderRadius: 6, height: 10, overflow: 'hidden' }}>
+              <div style={{ background: c.border, borderRadius: 4, height: 6, overflow: 'hidden' }}>
                 <div style={{
-                  background: 'linear-gradient(90deg, #3b82f6, #a855f7, #f59e0b)',
-                  height: '100%', borderRadius: 6,
-                  width: `${(progress.done / progress.total) * 100}%`,
-                  transition: 'width 0.3s ease',
-                  boxShadow: '0 0 8px #3b82f644',
+                  background: c.accent, height: '100%', borderRadius: 4,
+                  width: `${pct}%`,
+                  transition: 'width 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
                 }} />
               </div>
-              <span style={{ fontSize: 11, color: c.textMuted, marginTop: 2, display: 'block' }}>
-                {progress.done} / {progress.total} 支股票
-              </span>
             </div>
           )}
         </div>
@@ -157,68 +184,62 @@ export default function Dashboard() {
       {/* Market status */}
       {market && (
         <div style={{
-          background: market.trend === 'bull' ? '#16a34a15' : market.trend === 'bear' ? '#ef444415' : c.bgCard,
-          border: `1px solid ${market.trend === 'bull' ? '#16a34a33' : market.trend === 'bear' ? '#ef444433' : c.border}`,
-          borderRadius: 8, padding: '10px 16px', fontSize: 13,
-          color: market.trend === 'bull' ? '#16a34a' : market.trend === 'bear' ? '#ef4444' : c.textSecondary,
+          borderLeft: `3px solid ${market.trend === 'bull' ? c.up : market.trend === 'bear' ? c.down : c.textMuted}`,
+          padding: '8px 14px', fontSize: 13, lineHeight: 1.6,
+          color: market.trend === 'bull' ? c.up : market.trend === 'bear' ? c.down : c.textSecondary,
         }}>
-          大盤趨勢：{market.trendLabel} &nbsp;（加權指數 {market.indexPrice} · MA20 {market.ma20} · MA60 {market.ma60}）
+          大盤趨勢：<strong>{market.trendLabel}</strong> （加權 {market.indexPrice} · MA20 {market.ma20} · MA60 {market.ma60}）
         </div>
       )}
 
       {/* Results summary */}
       {scannedAt && !loading && (
-        <div style={{
-          background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10,
-          padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8,
-        }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {totalScanned < 1000 && (
             <div style={{
-              background: '#ef444415', border: '1px solid #ef444433', borderRadius: 8,
+              background: '#ef44440c', borderLeft: '3px solid #ef4444',
               padding: '8px 12px', fontSize: 12, color: '#ef4444', fontWeight: 600,
             }}>
-              ⚠ 僅掃描到 {totalScanned} 支股票（正常應約 1700 支）。TWSE 上市股票資料可能抓取失敗，目前結果僅包含上櫃股票。建議稍後重新掃描。
+              僅掃描到 {totalScanned} 支股票（正常約 1700 支）。TWSE 資料可能抓取失敗，建議稍後重新掃描。
             </div>
           )}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ color: c.textDim, fontSize: 13 }}>
-              掃描時間：{new Date(scannedAt).toLocaleString('zh-TW')}
-              {latestDate && <>&nbsp;·&nbsp;資料日期：<strong style={{ color: c.text }}>{latestDate}</strong></>}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: c.text }}>
+                {totalScanned} 支掃描 →{' '}
+                <span style={{ color: c.accent, fontSize: 20 }}>{stocks.length}</span> 支精選
+              </span>
+              {stocks.length > 0 && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {RANK_TIERS.map(({ label, min, max, color }) => {
+                    const count = stocks.filter(s => s.score >= min && s.score < max).length;
+                    if (count === 0) return null;
+                    return (
+                      <span key={label} style={{
+                        fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4,
+                        background: color + '18', color, letterSpacing: '0.03em',
+                      }}>
+                        {label} {count}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <DownloadCsvButton count={stocks.length} onDownload={() => downloadBullPickCsv(stocks)} />
-          </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: c.text }}>
-              共 {totalScanned} 支 → 精選 <span style={{ color: '#f59e0b', fontSize: 18 }}>{stocks.length}</span> 支
-            </span>
-            {stocks.length > 0 && (
-              <div style={{ display: 'flex', gap: 6 }}>
-                {[
-                  { label: 'SSS', min: 90, color: '#fbbf24' },
-                  { label: 'SS', min: 80, color: '#f59e0b' },
-                  { label: 'S', min: 70, color: '#ef4444' },
-                  { label: 'A', min: 60, color: '#a855f7' },
-                  { label: 'B', min: 50, color: '#3b82f6' },
-                ].map(({ label, min, color }) => {
-                  const count = stocks.filter(s => {
-                    if (min === 90) return s.score >= 90;
-                    if (min === 80) return s.score >= 80 && s.score < 90;
-                    if (min === 70) return s.score >= 70 && s.score < 80;
-                    if (min === 60) return s.score >= 60 && s.score < 70;
-                    return s.score >= 50 && s.score < 60;
-                  }).length;
-                  if (count === 0) return null;
-                  return (
-                    <span key={label} style={{
-                      fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 5,
-                      background: color + '20', color, border: `1px solid ${color}33`,
-                    }}>
-                      {label} x{count}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 11, color: c.textMuted }}>
+                {new Date(scannedAt).toLocaleString('zh-TW')}
+                {latestDate && ` · 資料 ${latestDate}`}
+              </span>
+              {stocks.length > 0 && (
+                <button onClick={() => downloadBullPickCsv(stocks)} style={{
+                  background: 'transparent', border: `1px solid ${c.border}`, borderRadius: 6,
+                  padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  color: c.textSecondary,
+                }}>CSV</button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -227,89 +248,54 @@ export default function Dashboard() {
       <IndustryHeatmap industries={industries} />
 
       {/* Stock cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {stocks.map((s) => <BullPickRow key={s.symbol} stock={s} />)}
       </div>
 
-      <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} emptyMsg="目前沒有符合強勢精選條件的股票。" />
+      <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} />
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SHARED COMPONENTS
+// SUB-COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-function EmptyState({ loading, hasResults, scannedAt, emptyMsg }: { loading: boolean; hasResults: boolean; scannedAt: string; emptyMsg: string }) {
+function EmptyState({ loading, hasResults, scannedAt }: { loading: boolean; hasResults: boolean; scannedAt: string }) {
   const c = useColors();
   if (hasResults || loading) return null;
-  if (scannedAt) {
-    return (
-      <div style={{ ...S.empty, color: c.textDim }}>
-        {emptyMsg}<br />可以調整篩選條件後再試。
-      </div>
-    );
-  }
   return (
-    <div style={{ ...S.empty, color: c.textDim }}>
-      點擊「掃描全市場」開始分析台灣上市櫃股票。<br />
-      <span style={{ fontSize: 13 }}>系統會從 TWSE / TPEx 抓取完整股票清單，再逐一分析。</span>
+    <div style={{ textAlign: 'center', padding: '60px 0', color: c.textDim, fontSize: 14, lineHeight: 2 }}>
+      {scannedAt
+        ? <>目前沒有符合條件的股票，可調整篩選後再試。</>
+        : <>點擊「掃描全市場」開始分析台灣上市櫃股票。</>}
     </div>
   );
 }
 
-function DownloadCsvButton({ count, onDownload }: { count: number; onDownload: () => void }) {
-  const c = useColors();
-  if (count === 0) return null;
-  return (
-    <button onClick={onDownload} style={{
-      background: 'transparent', border: `1px solid ${c.border}`, borderRadius: 6,
-      padding: '5px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-      color: c.textSecondary, display: 'inline-flex', alignItems: 'center', gap: 6,
-    }}>
-      <span style={{ fontSize: 15 }}>&#8681;</span>
-      下載 CSV（{count} 筆）
-    </button>
-  );
-}
-
-function ScanActions({ loading, onScan, onReset }: { loading: boolean; onScan: () => void; onReset: () => void }) {
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
   const c = useColors();
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginTop: 4 }}>
-      <button onClick={onScan} disabled={loading} style={{ ...S.scanBtn, opacity: loading ? 0.7 : 1 }}>
-        {loading ? (<><span style={S.spinner} />掃描中...</>) : '掃描全市場'}
-      </button>
-      <button onClick={onReset} style={{ ...S.resetBtn, borderColor: c.border, color: c.textSecondary }}>重設預設</button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</span>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{children}</div>
     </div>
   );
 }
 
-function FilterInput({ label, value, onChange, hint, step = 1 }: {
-  label: string; value: number; onChange: (v: number) => void; hint?: string; step?: number;
+function FilterInput({ label, value, onChange, hint, c }: {
+  label: string; value: number; onChange: (v: number) => void; hint?: string; c: ReturnType<typeof useColors>;
 }) {
-  const c = useColors();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <label style={{ color: c.textSecondary, fontSize: 12 }}>{label}</label>
-      <input type="number" value={value} step={step} onChange={(e) => onChange(Number(e.target.value))}
-        style={{ background: c.bgInput, border: `1px solid ${c.border}`, borderRadius: 6, color: c.text, fontSize: 15, padding: '7px 12px', outline: 'none', width: 120 }} />
-      {hint && <span style={{ color: c.textDim, fontSize: 11 }}>{hint}</span>}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <label style={{ color: c.textSecondary, fontSize: 11 }}>{label}</label>
+      <input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))}
+        style={{
+          background: c.bgInput, border: `1px solid ${c.border}`, borderRadius: 6,
+          color: c.text, fontSize: 14, fontWeight: 600, padding: '7px 10px',
+          outline: 'none', width: 110,
+        }} />
+      {hint && <span style={{ color: c.textDim, fontSize: 10 }}>{hint}</span>}
     </div>
   );
 }
-
-const S: Record<string, React.CSSProperties> = {
-  page: { maxWidth: 1200, margin: '0 auto', padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100vh', transition: 'background-color 0.2s' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 },
-  title: { margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' },
-  subtitle: { margin: '4px 0 0', fontSize: 15 },
-  filterBar: { display: 'flex', alignItems: 'flex-start', gap: 24, padding: '16px 20px', borderRadius: 8, flexWrap: 'wrap', border: '1px solid transparent' },
-  filterGroup: { display: 'flex', flexDirection: 'column' as const, gap: 8 },
-  filterGroupLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.06em' },
-  filterGroupInputs: { display: 'flex', gap: 16, flexWrap: 'wrap' as const },
-  scanBtn: { display: 'flex', alignItems: 'center', gap: 8, color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 16, fontWeight: 800, cursor: 'pointer', background: 'linear-gradient(135deg, #3b82f6, #a855f7)', boxShadow: '0 4px 14px #3b82f633', letterSpacing: '0.02em' },
-  resetBtn: { background: 'transparent', border: '1px solid', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' },
-  spinner: { display: 'inline-block', width: 14, height: 14, border: '2px solid #ffffff44', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
-  empty: { textAlign: 'center', padding: '60px 0', fontSize: 15, lineHeight: 2 },
-};

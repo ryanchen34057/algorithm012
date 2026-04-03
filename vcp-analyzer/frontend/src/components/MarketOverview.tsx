@@ -25,92 +25,57 @@ export default function MarketOverview() {
     return (
       <div style={{
         background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10,
-        padding: '14px 20px', fontSize: 13, color: c.textMuted,
+        padding: '12px 16px', fontSize: 12, color: c.textMuted,
       }}>
         載入全球指數中...
       </div>
     );
   }
 
-  if (indices.length === 0) return null;
+  if (indices.length === 0 && !taifex) return null;
 
   return (
     <div style={{
       background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10,
-      padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 10,
+      padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: c.text }}>全球指數 / 期貨</span>
-        <span style={{ fontSize: 11, color: c.textMuted }}>含美股盤後 & 台指夜盤</span>
-      </div>
+      <span style={{ fontSize: 12, fontWeight: 700, color: c.textMuted, letterSpacing: '0.06em' }}>
+        全球指數 / 期貨
+      </span>
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-        gap: 8,
+        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+        gap: 6,
       }}>
-        {indices.map((q) => {
-          const isUp = q.changePct > 0;
-          const isDown = q.changePct < 0;
-          const color = isUp ? c.up : isDown ? c.down : c.textMuted;
-          const bg = isUp ? c.up + '12' : isDown ? c.down + '12' : c.textMuted + '08';
+        {indices.map((q) => <QuoteCard key={q.symbol} name={q.name} price={q.price} changePct={q.changePct} time={q.time} />)}
+        {taifex && <QuoteCard name={taifex.name} price={taifex.price} changePct={taifex.changePct} time={taifex.time} />}
+      </div>
+    </div>
+  );
+}
 
-          return (
-            <div key={q.symbol} style={{
-              background: bg, borderRadius: 8, padding: '8px 10px',
-              display: 'flex', flexDirection: 'column', gap: 2,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{q.name}</span>
-                <span style={{ fontSize: 10, color: c.textMuted }}>{q.time}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color }}>
-                  {q.price.toLocaleString()}
-                </span>
-                <span style={{
-                  fontSize: 12, fontWeight: 700, color,
-                  padding: '1px 5px', borderRadius: 3,
-                  background: isUp ? c.up + '20' : isDown ? c.down + '20' : 'transparent',
-                }}>
-                  {q.changePct > 0 ? '+' : ''}{q.changePct}%
-                </span>
-              </div>
-            </div>
-          );
-        })}
+function QuoteCard({ name, price, changePct, time }: { name: string; price: number; changePct: number; time: string }) {
+  const c = useColors();
+  const isUp = changePct > 0;
+  const isDown = changePct < 0;
+  const color = isUp ? c.up : isDown ? c.down : c.textMuted;
 
-        {/* TAIFEX futures (台指期貨/夜盤) */}
-        {taifex && (() => {
-          const isUp = taifex.changePct > 0;
-          const isDown = taifex.changePct < 0;
-          const color = isUp ? c.up : isDown ? c.down : c.textMuted;
-          const bg = isUp ? c.up + '12' : isDown ? c.down + '12' : c.textMuted + '08';
-          return (
-            <div style={{
-              background: bg, borderRadius: 8, padding: '8px 10px',
-              display: 'flex', flexDirection: 'column', gap: 2,
-              border: `1px solid ${isUp ? c.up + '30' : isDown ? c.down + '30' : c.border}`,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{taifex.name}</span>
-                <span style={{ fontSize: 10, color: c.textMuted }}>{taifex.time}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color }}>
-                  {taifex.price.toLocaleString()}
-                </span>
-                <span style={{
-                  fontSize: 12, fontWeight: 700, color,
-                  padding: '1px 5px', borderRadius: 3,
-                  background: isUp ? c.up + '20' : isDown ? c.down + '20' : 'transparent',
-                }}>
-                  {taifex.changePct > 0 ? '+' : ''}{taifex.changePct}%
-                </span>
-              </div>
-            </div>
-          );
-        })()}
+  return (
+    <div style={{
+      background: (isUp ? c.up : isDown ? c.down : c.textMuted) + '08',
+      borderRadius: 6, padding: '8px 10px',
+      display: 'flex', flexDirection: 'column', gap: 2,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: c.text }}>{name}</span>
+        <span style={{ fontSize: 9, color: c.textDim }}>{time}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color }}>{price.toLocaleString()}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color }}>
+          {changePct > 0 ? '+' : ''}{changePct}%
+        </span>
       </div>
     </div>
   );

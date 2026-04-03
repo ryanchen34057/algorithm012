@@ -1,5 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;800;900&family=Space+Grotesk:wght@400;600;700&display=swap');
+
 :root {
-  font-family: Inter, system-ui, -apple-system, sans-serif;
+  /* Space Grotesk for numbers/labels, Noto Sans TC for Chinese */
+  font-family: 'Space Grotesk', 'Noto Sans TC', system-ui, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -8,18 +11,18 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Dark theme (default) */
+/* Dark theme (default) — warm tinted */
 :root[data-theme="dark"], :root:not([data-theme]) {
   color-scheme: dark;
-  color: #e2e8f0;
-  background-color: #0f172a;
+  color: #ede8f5;
+  background-color: #141118;
 }
 
-/* Light theme */
+/* Light theme — warm tinted */
 :root[data-theme="light"] {
   color-scheme: light;
-  color: #0f172a;
-  background-color: #f8fafc;
+  color: #1a1520;
+  background-color: #f5f2f0;
 }
 
 *, *::before, *::after {
@@ -30,14 +33,15 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  transition: background-color 0.2s, color 0.2s;
+  transition: background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              color 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root[data-theme="dark"] body, :root:not([data-theme]) body {
-  background: #0f172a;
+  background: #141118;
 }
 :root[data-theme="light"] body {
-  background: #f8fafc;
+  background: #f5f2f0;
 }
 
 #root {
@@ -48,26 +52,57 @@ body {
   to { transform: rotate(360deg); }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 table {
   border-spacing: 0;
 }
 
+/* Scrollbar — warm tinted */
 ::-webkit-scrollbar {
   width: 6px;
 }
 :root[data-theme="dark"] ::-webkit-scrollbar-track,
 :root:not([data-theme]) ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: #1c1825;
 }
 :root[data-theme="dark"] ::-webkit-scrollbar-thumb,
 :root:not([data-theme]) ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #2d2636;
   border-radius: 3px;
 }
 :root[data-theme="light"] ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #eeebe8;
 }
 :root[data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #c4bcb2;
   border-radius: 3px;
+}
+
+/* Focus ring — warm gold */
+:focus-visible {
+  outline: 2px solid #e5a100;
+  outline-offset: 2px;
+}
+
+/* Inputs */
+input[type="number"] {
+  font-family: 'Space Grotesk', 'Noto Sans TC', system-ui, sans-serif;
+}
+input[type="number"]:focus {
+  border-color: #e5a100 !important;
+}
+
+/* Buttons base reset */
+button {
+  font-family: 'Space Grotesk', 'Noto Sans TC', system-ui, sans-serif;
+  transition: background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.1s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+button:active:not(:disabled) {
+  transform: scale(0.97);
 }
