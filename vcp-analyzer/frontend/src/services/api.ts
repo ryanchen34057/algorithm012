@@ -102,9 +102,9 @@ function classifyBySymbol(symbol: string): string {
     if (num >= 9100 && num < 9200) return '觀光餐旅';
     if (num >= 9900 && num < 10000) return '貿易百貨';
 
-    // OTC fallback by first digit
+    // OTC fallback by first digit (1xxx, 2xxx share TWSE prefix logic)
     if (n2 >= 10 && n2 <= 22) return classifyTWSE(n2);
-    return '電子業'; // most OTC stocks are electronics
+    return ''; // truly unknown — will be excluded from heatmap
   }
 
   // ── TWSE 上市 — use 2-digit prefix ──
@@ -144,8 +144,8 @@ function classifyTWSE(n2: number): string {
   if (n2 === 92) return '貿易百貨';
   if (n2 === 93) return '油電燃氣';
   if (n2 === 94) return '綜合';
-  if (n2 >= 96) return '電子業';
-  return '電子業'; // default for unclassified TWSE codes
+  if (n2 >= 96) return '';
+  return ''; // unknown — excluded from heatmap
 }
 
 // Base URL: empty string when deployed to Vercel (same origin), or override for local dev
@@ -634,6 +634,7 @@ function computeIndustrySectors(
     const code = s.symbol.replace(/\.(TW|TWO)$/, '');
     const ind = indMap[s.symbol];
     const industry = ind?.industry || classifyBySymbol(s.symbol);
+    if (!industry) continue; // skip unclassifiable stocks
 
     let g = map.get(industry);
     if (!g) {
