@@ -11,7 +11,6 @@ export default async function handler(req: any, res: any) {
   const debug: string[] = [];
 
   try {
-    // Try multiple TAIFEX endpoints
     const result = await fetchTAIFEX(debug);
     if (result) {
       res.json({ ...result, debug });
@@ -30,14 +29,92 @@ interface TaifexResult {
   change: number;
   changePct: number;
   time: string;
-  session: string; // 'day' | 'night'
+  session: string;
 }
 
 async function fetchTAIFEX(debug: string[]): Promise<TaifexResult | null> {
-  // Strategy 1: TAIFEX OpenAPI
+  // Strategy 1: cnyes (鉅亨網) — most reliable from overseas
+  const cnyes = await tryCnyes(debug);
+  if (cnyes) return cnyes;
+
+  // Strategy 2: TAIFEX OpenAPI
+  const openapi = await tryTaifexOpenAPI(debug);
+  if (openapi) return openapi;
+
+  // Strategy 3: TAIFEX MIS API
+  const mis = await tryTaifexMIS(debug);
+  if (mis) return mis;
+
+  // Strategy 4: Fugle MarketData API (free tier)
+  const fugle = await tryFugle(debug);
+  if (fugle) return fugle;
+
+  return null;
+}
+
+// ── Strategy 1: cnyes (鉅亨網) ──
+async function tryCnyes(debug: string[]): Promise<TaifexResult | null> {
+  try {
+    // cnyes quote API for TXF (台指期近月)
+    const url = 'https://ws.api.cnyes.com/ws/api/v1/quote/quotes/TXF1:TAIFEX';
+    debug.push(`cnyes trying: ${url}`);
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'application/json',
+      },
+    });
+    debug.push(`cnyes → HTTP ${r.status}`);
+    if (!r.ok) return null;
+
+    const body = await r.json();
+    debug.push(`cnyes keys: ${JSON.stringify(Object.keys(body)).slice(0, 200)}`);
+
+    // cnyes format: { statusCode, message, data: { ... } }
+    const data = body?.data?.items?.[0] ?? body?.data ?? body?.items?.[0];
+    if (!data) {
+      debug.push('cnyes: no data found in response');
+      return null;
+    }
+    debug.push(`cnyes data keys: ${Object.keys(data).slice(0, 15).join(',')}`);
+
+    const price = parseFloat(data.lastPrice ?? data.price ?? data.c ?? 0);
+    const prevClose = parseFloat(data.previousClose ?? data.refPrice ?? data.preClose ?? data.o ?? 0);
+    if (!price) {
+      debug.push('cnyes: price is 0');
+      return null;
+    }
+
+    const change = prevClose > 0 ? price - prevClose : parseFloat(data.change ?? data.priceChange ?? 0);
+    const changePct = prevClose > 0
+      ? (change / prevClose) * 100
+      : parseFloat(data.changePct ?? data.changePercent ?? data.percentChange ?? 0);
+
+    // Determine session (day/night) — night session is roughly 15:00-05:00 next day
+    const now = new Date();
+    const twHour = (now.getUTCHours() + 8) % 24;
+    const isNight = twHour >= 15 || twHour < 5;
+
+    return {
+      symbol: 'TXF',
+      name: isNight ? '台指夜盤' : '台指期貨',
+      price: Math.round(price * 100) / 100,
+      change: Math.round(change * 100) / 100,
+      changePct: Math.round(changePct * 100) / 100,
+      time: data.tradeTime ?? data.lastUpdated ?? '',
+      session: isNight ? 'night' : 'day',
+    };
+  } catch (e) {
+    debug.push(`cnyes error: ${e}`);
+    return null;
+  }
+}
+
+// ── Strategy 2: TAIFEX OpenAPI ──
+async function tryTaifexOpenAPI(debug: string[]): Promise<TaifexResult | null> {
   try {
     const url = 'https://openapi.taifex.com.tw/v1/getQuoteListSelection';
-    debug.push(`TAIFEX trying OpenAPI: ${url}`);
+    debug.push(`TAIFEX OpenAPI trying: ${url}`);
     const r = await fetch(url, {
       headers: {
         'User-Agent': UA,
@@ -47,20 +124,49 @@ async function fetchTAIFEX(debug: string[]): Promise<TaifexResult | null> {
       },
     });
     debug.push(`TAIFEX OpenAPI → HTTP ${r.status}`);
-    if (r.ok) {
-      const body = await r.json();
-      debug.push(`TAIFEX OpenAPI response keys: ${JSON.stringify(Object.keys(body)).slice(0, 200)}`);
-      const parsed = parseTaifexOpenAPI(body, debug);
-      if (parsed) return parsed;
+    if (!r.ok) return null;
+
+    const body = await r.json();
+    if (!Array.isArray(body)) {
+      debug.push(`TAIFEX OpenAPI: not array, keys=${Object.keys(body).join(',')}`);
+      return null;
     }
+
+    // Find nearest-month TX contract
+    const tx = body.find((item: any) =>
+      (item.CommodityId === 'TX' || item.commodityId === 'TX' || item.ContractCode === 'TX')
+    );
+    if (!tx) {
+      debug.push(`TAIFEX OpenAPI: TX not found in ${body.length} items`);
+      return null;
+    }
+    debug.push(`TAIFEX OpenAPI found TX: ${JSON.stringify(tx).slice(0, 300)}`);
+
+    const price = parseFloat(tx.LastPrice ?? tx.lastPrice ?? tx.SettlementPrice ?? 0);
+    const prevClose = parseFloat(tx.PrevSettlementPrice ?? tx.prevSettlementPrice ?? tx.ReferencePrice ?? 0);
+    const change = prevClose > 0 ? price - prevClose : 0;
+    const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+
+    return {
+      symbol: 'TX',
+      name: '台指期貨',
+      price,
+      change: Math.round(change * 100) / 100,
+      changePct: Math.round(changePct * 100) / 100,
+      time: tx.TradeDate ?? tx.Time ?? '',
+      session: tx.Session === '1' ? 'night' : 'day',
+    };
   } catch (e) {
     debug.push(`TAIFEX OpenAPI error: ${e}`);
+    return null;
   }
+}
 
-  // Strategy 2: TAIFEX MIS API (market information system)
+// ── Strategy 3: TAIFEX MIS API ──
+async function tryTaifexMIS(debug: string[]): Promise<TaifexResult | null> {
   try {
     const url = 'https://mis.taifex.com.tw/futures/api/getQuoteList';
-    debug.push(`TAIFEX trying MIS: ${url}`);
+    debug.push(`TAIFEX MIS trying: ${url}`);
     const r = await fetch(url, {
       method: 'POST',
       headers: {
@@ -70,109 +176,78 @@ async function fetchTAIFEX(debug: string[]): Promise<TaifexResult | null> {
         'Origin': 'https://mis.taifex.com.tw',
         'Referer': 'https://mis.taifex.com.tw/futures/SpotQuotes',
       },
-      body: JSON.stringify({
-        MarketType: '0',
-        CID: 'TX',
-        SymbolType: 'F',
-      }),
+      body: JSON.stringify({ MarketType: '0', CID: 'TX', SymbolType: 'F' }),
     });
     debug.push(`TAIFEX MIS → HTTP ${r.status}`);
-    if (r.ok) {
-      const body = await r.json();
-      debug.push(`TAIFEX MIS response: ${JSON.stringify(body).slice(0, 500)}`);
-      const parsed = parseTaifexMIS(body, debug);
-      if (parsed) return parsed;
+    if (!r.ok) return null;
+
+    const body = await r.json();
+    const list = body?.RtData?.QuoteList ?? body?.RtData ?? [];
+    if (!Array.isArray(list) || list.length === 0) {
+      debug.push('TAIFEX MIS: empty list');
+      return null;
     }
+
+    const tx = list.find((item: any) => item.CID === 'TX' || item.SymbolID?.startsWith('TX'));
+    if (!tx) {
+      debug.push('TAIFEX MIS: TX not found');
+      return null;
+    }
+    debug.push(`TAIFEX MIS found TX: ${JSON.stringify(tx).slice(0, 300)}`);
+
+    const price = parseFloat(tx.CLastPrice ?? tx.LastPrice ?? 0);
+    const prevClose = parseFloat(tx.CRefPrice ?? tx.ReferencePrice ?? 0);
+    const change = prevClose > 0 ? price - prevClose : 0;
+    const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+
+    return {
+      symbol: 'TX',
+      name: '台指期貨',
+      price,
+      change: Math.round(change * 100) / 100,
+      changePct: Math.round(changePct * 100) / 100,
+      time: tx.CTime ?? tx.Time ?? '',
+      session: tx.Session === '1' ? 'night' : 'day',
+    };
   } catch (e) {
     debug.push(`TAIFEX MIS error: ${e}`);
+    return null;
   }
+}
 
-  // Strategy 3: TAIFEX daily futures data page
+// ── Strategy 4: Fugle MarketData API ──
+async function tryFugle(debug: string[]): Promise<TaifexResult | null> {
   try {
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
-    const url = `https://www.taifex.com.tw/cht/3/futContractsDate`;
-    debug.push(`TAIFEX trying daily page: ${url}`);
+    // Fugle intraday quote for TX futures
+    const url = 'https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/TXF1';
+    debug.push(`Fugle trying: ${url}`);
     const r = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'User-Agent': UA,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'text/html, application/json',
-        'Referer': 'https://www.taifex.com.tw/cht/3/futContractsDate',
-      },
-      body: `queryType=1&goession=0&commodityId=TX&queryDate=${encodeURIComponent(dateStr)}&MarketCode=0`,
+      headers: { 'User-Agent': UA, 'Accept': 'application/json' },
     });
-    debug.push(`TAIFEX daily → HTTP ${r.status}`);
-    if (r.ok) {
-      const text = await r.text();
-      debug.push(`TAIFEX daily response length: ${text.length}`);
-      // Try to parse if JSON
-      try {
-        const body = JSON.parse(text);
-        debug.push(`TAIFEX daily JSON keys: ${Object.keys(body).join(',')}`);
-      } catch {
-        // HTML response - try to extract data
-        const match = text.match(/台股期貨[\s\S]*?(\d{2},?\d{3})/);
-        if (match) debug.push(`TAIFEX daily found price pattern: ${match[1]}`);
-      }
-    }
+    debug.push(`Fugle → HTTP ${r.status}`);
+    if (!r.ok) return null;
+
+    const body = await r.json();
+    debug.push(`Fugle keys: ${Object.keys(body).join(',')}`);
+
+    const price = parseFloat(body.lastPrice ?? body.closePrice ?? 0);
+    const prevClose = parseFloat(body.previousClose ?? body.referencePrice ?? 0);
+    if (!price) return null;
+
+    const change = prevClose > 0 ? price - prevClose : 0;
+    const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+
+    return {
+      symbol: 'TXF',
+      name: '台指期貨',
+      price,
+      change: Math.round(change * 100) / 100,
+      changePct: Math.round(changePct * 100) / 100,
+      time: body.lastUpdated ?? '',
+      session: 'day',
+    };
   } catch (e) {
-    debug.push(`TAIFEX daily error: ${e}`);
+    debug.push(`Fugle error: ${e}`);
+    return null;
   }
-
-  return null;
-}
-
-function parseTaifexOpenAPI(body: any, debug: string[]): TaifexResult | null {
-  // OpenAPI may return array of quotes
-  if (Array.isArray(body)) {
-    const tx = body.find((item: any) =>
-      (item.CommodityId === 'TX' || item.commodityId === 'TX' || item.ContractCode === 'TX') &&
-      item.ExpiryMonth // near-month contract
-    );
-    if (tx) {
-      debug.push(`TAIFEX OpenAPI found TX: ${JSON.stringify(tx).slice(0, 300)}`);
-      const price = parseFloat(tx.LastPrice ?? tx.lastPrice ?? tx.SettlementPrice ?? 0);
-      const prevClose = parseFloat(tx.PrevSettlementPrice ?? tx.prevSettlementPrice ?? tx.ReferencePrice ?? 0);
-      const change = prevClose > 0 ? price - prevClose : 0;
-      const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
-      return {
-        symbol: 'TX',
-        name: '台指期貨',
-        price,
-        change: Math.round(change * 100) / 100,
-        changePct: Math.round(changePct * 100) / 100,
-        time: tx.TradeDate ?? tx.Time ?? '',
-        session: tx.Session === '1' ? 'night' : 'day',
-      };
-    }
-  }
-  return null;
-}
-
-function parseTaifexMIS(body: any, debug: string[]): TaifexResult | null {
-  // MIS API returns { RtCode, RtMsg, RtData: { QuoteList: [...] } }
-  const list = body?.RtData?.QuoteList ?? body?.RtData ?? [];
-  if (Array.isArray(list) && list.length > 0) {
-    // Find nearest month TX contract
-    const tx = list.find((item: any) => item.CID === 'TX' || item.SymbolID?.startsWith('TX'));
-    if (tx) {
-      debug.push(`TAIFEX MIS found TX: ${JSON.stringify(tx).slice(0, 300)}`);
-      const price = parseFloat(tx.CLastPrice ?? tx.LastPrice ?? 0);
-      const prevClose = parseFloat(tx.CRefPrice ?? tx.ReferencePrice ?? 0);
-      const change = prevClose > 0 ? price - prevClose : 0;
-      const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
-      return {
-        symbol: 'TX',
-        name: '台指期貨',
-        price,
-        change: Math.round(change * 100) / 100,
-        changePct: Math.round(changePct * 100) / 100,
-        time: tx.CTime ?? tx.Time ?? '',
-        session: tx.Session === '1' ? 'night' : 'day',
-      };
-    }
-  }
-  return null;
 }
