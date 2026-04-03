@@ -37,11 +37,81 @@ const CONCEPT_TAGS: Record<string, string> = {
   '3665': '連接器', '2368': '光電/IC',
 };
 
-function classifyByCode(code: string): string {
+// Accept full symbol (e.g. "2330.TW") to distinguish TWSE vs OTC
+function classifyBySymbol(symbol: string): string {
+  const isOTC = symbol.endsWith('.TWO');
+  const code = symbol.replace(/\.(TW|TWO)$/, '');
   const num = parseInt(code);
   const n2 = parseInt(code.slice(0, 2));
 
-  // ── TWSE 上市 (4-digit codes) ──
+  // ── OTC 上櫃 (TPEx) — use 4-digit ranges first ──
+  if (isOTC) {
+    // 1xxx OTC: traditional industries
+    if (num >= 1200 && num < 1300) return '食品工業';
+    if (num >= 1300 && num < 1400) return '塑膠工業';
+    if (num >= 1500 && num < 1600) return '紡織纖維';
+    if (num >= 1600 && num < 1700) return '電機機械';
+    if (num >= 1700 && num < 1800) return '電器電纜';
+    if (num >= 1800 && num < 1900) return '化學工業';
+    if (num >= 1900 && num < 2000) return '生技醫療';
+    if (num >= 2000 && num < 2100) return '玻璃陶瓷';
+    if (num >= 2100 && num < 2200) return '造紙工業';
+    if (num >= 2200 && num < 2300) return '鋼鐵工業';
+    if (num >= 2300 && num < 2400) return '半導體業';
+    if (num >= 2500 && num < 2600) return '建材營造';
+    if (num >= 2600 && num < 2700) return '航運業';
+    if (num >= 2700 && num < 2800) return '觀光餐旅';
+    if (num >= 2800 && num < 3000) return '金融保險';
+    // 3xxx OTC: electronics
+    if (num >= 3000 && num < 3100) return '電腦及週邊';
+    if (num >= 3100 && num < 3200) return '半導體業';
+    if (num >= 3200 && num < 3400) return '光電業';
+    if (num >= 3400 && num < 3600) return '通信網路業';
+    if (num >= 3600 && num < 3700) return '電子零組件';
+    if (num >= 3700 && num < 3800) return '電子通路業';
+    if (num >= 3800 && num < 4000) return '資訊服務業';
+    // 4xxx OTC: mostly biotech/tourism/cultural
+    if (num >= 4100 && num < 4200) return '生技醫療';
+    if (num >= 4200 && num < 4300) return '文化創意';
+    if (num >= 4300 && num < 4600) return '生技醫療';
+    if (num >= 4700 && num < 4800) return '觀光餐旅';
+    if (num >= 4800 && num < 4900) return '居家生活';
+    if (num >= 4900 && num < 5000) return '電腦及週邊';
+    if (num >= 4000 && num < 5000) return '生技醫療'; // catch remaining 4xxx
+    // 5xxx OTC: electronics
+    if (num >= 5200 && num < 5400) return '半導體業';
+    if (num >= 5800 && num < 5900) return '金融保險';
+    if (num >= 5000 && num < 6000) return '電子業';
+    // 6xxx OTC: electronics
+    if (num >= 6100 && num < 6200) return '光電業';
+    if (num >= 6200 && num < 6300) return '電子零組件';
+    if (num >= 6400 && num < 6500) return '通信網路業';
+    if (num >= 6500 && num < 6600) return '半導體業';
+    if (num >= 6600 && num < 6700) return '電腦及週邊';
+    if (num >= 6700 && num < 6900) return '電子業';
+    if (num >= 6000 && num < 7000) return '電子業';
+    // 8xxx OTC: mixed
+    if (num >= 8000 && num < 8100) return '建材營造';
+    if (num >= 8100 && num < 8200) return '電子零組件';
+    if (num >= 8200 && num < 8300) return '資訊服務業';
+    if (num >= 8300 && num < 8400) return '通信網路業';
+    if (num >= 8400 && num < 8500) return '電子業';
+    if (num >= 8900 && num < 9000) return '生技醫療';
+    if (num >= 8000 && num < 9000) return '電子業';
+    // 9xxx OTC
+    if (num >= 9100 && num < 9200) return '觀光餐旅';
+    if (num >= 9900 && num < 10000) return '貿易百貨';
+
+    // OTC fallback by first digit
+    if (n2 >= 10 && n2 <= 22) return classifyTWSE(n2);
+    return '電子業'; // most OTC stocks are electronics
+  }
+
+  // ── TWSE 上市 — use 2-digit prefix ──
+  return classifyTWSE(n2);
+}
+
+function classifyTWSE(n2: number): string {
   if (n2 === 10 || n2 === 11) return '水泥工業';
   if (n2 === 12) return '食品工業';
   if (n2 === 13 || n2 === 14) return '塑膠工業';
@@ -64,55 +134,18 @@ function classifyByCode(code: string): string {
   if (n2 === 36) return '電子零組件';
   if (n2 === 37 || n2 === 38) return '電子通路業';
   if (n2 === 39 || n2 === 40) return '資訊服務業';
-  if (n2 >= 41 && n2 <= 49) return '其他電子業';
-  if (n2 >= 50 && n2 <= 58) return '其他電子業';
+  if (n2 >= 41 && n2 <= 49) return '電子業';
+  if (n2 >= 50 && n2 <= 58) return '電子業';
   if (n2 === 59 || n2 === 95) return '金融保險';
-  if (n2 >= 60 && n2 <= 68) return '電子零組件';
-  if (n2 >= 69 && n2 <= 79) return '電子零組件'; // extended range
-  if (n2 >= 80 && n2 <= 89) return '其他電子業';
+  if (n2 >= 60 && n2 <= 79) return '電子零組件';
+  if (n2 >= 80 && n2 <= 89) return '電子業';
+  if (n2 === 90) return '綜合';
   if (n2 === 91) return '觀光餐旅';
   if (n2 === 92) return '貿易百貨';
   if (n2 === 93) return '油電燃氣';
   if (n2 === 94) return '綜合';
-  if (n2 === 96 || n2 === 97) return '其他';
-
-  // ── TPEx 上櫃 (often 3xxx, 4xxx, 5xxx, 6xxx, 8xxx) ──
-  // When industry API fails, classify OTC stocks by code range
-  if (num >= 1000 && num < 2000) return '水泥食品';
-  if (num >= 3000 && num < 3100) return '電腦及週邊';
-  if (num >= 3100 && num < 3200) return '半導體業';
-  if (num >= 3200 && num < 3400) return '光電業';
-  if (num >= 3400 && num < 3600) return '通信網路業';
-  if (num >= 3600 && num < 3700) return '電子零組件';
-  if (num >= 3700 && num < 3800) return '電子通路業';
-  if (num >= 4100 && num < 4200) return '生技醫療';
-  if (num >= 4300 && num < 4500) return '生技醫療';
-  if (num >= 4700 && num < 4800) return '觀光餐旅';
-  if (num >= 4900 && num < 5000) return '電腦及週邊';
-  if (num >= 5200 && num < 5400) return '半導體業';
-  if (num >= 5800 && num < 5900) return '金融保險';
-  if (num >= 6100 && num < 6200) return '光電業';
-  if (num >= 6200 && num < 6300) return '電子零組件';
-  if (num >= 6400 && num < 6500) return '通信網路業';
-  if (num >= 6500 && num < 6600) return '半導體業';
-  if (num >= 6600 && num < 6700) return '電腦及週邊';
-  if (num >= 6700 && num < 6800) return '其他電子業';
-  if (num >= 6800 && num < 6900) return '其他電子業';
-  if (num >= 8000 && num < 8100) return '建材營造';
-  if (num >= 8100 && num < 8200) return '電子零組件';
-  if (num >= 8200 && num < 8300) return '資訊服務業';
-  if (num >= 8300 && num < 8400) return '通信網路業';
-  if (num >= 8400 && num < 8500) return '其他電子業';
-  if (num >= 8900 && num < 9000) return '生技醫療';
-
-  // Catch-all for remaining OTC ranges
-  if (num >= 3000 && num < 4000) return '電子業';
-  if (num >= 4000 && num < 5000) return '生技醫療';
-  if (num >= 5000 && num < 6000) return '電子業';
-  if (num >= 6000 && num < 7000) return '電子業';
-  if (num >= 8000 && num < 9000) return '電子業';
-
-  return '其他';
+  if (n2 >= 96) return '電子業';
+  return '電子業'; // default for unclassified TWSE codes
 }
 
 // Base URL: empty string when deployed to Vercel (same origin), or override for local dev
@@ -459,8 +492,7 @@ export async function scanBullPick(
           }
           // Fallback: classify by stock code if still empty
           if (!result.industry) {
-            const code = s.symbol.replace(/\.(TW|TWO)$/, '');
-            result.industry = classifyByCode(code);
+            result.industry = classifyBySymbol(s.symbol);
           }
           if (!result.conceptTag) {
             const code = s.symbol.replace(/\.(TW|TWO)$/, '');
@@ -601,7 +633,7 @@ function computeIndustrySectors(
   for (const s of stocks) {
     const code = s.symbol.replace(/\.(TW|TWO)$/, '');
     const ind = indMap[s.symbol];
-    const industry = ind?.industry || classifyByCode(code);
+    const industry = ind?.industry || classifyBySymbol(s.symbol);
 
     let g = map.get(industry);
     if (!g) {
