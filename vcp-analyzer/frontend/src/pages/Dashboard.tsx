@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { scanBullPick, fetchIndustryFlow } from '../services/api';
-import { BullPickAnalysis, MarketStatus, IndustrySector } from '../types';
+import { BullPickAnalysis, MarketStatus, IndustrySector, IndustryStockEntry } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import BullPickRow from '../components/BullPickRow';
@@ -36,6 +36,7 @@ export default function Dashboard() {
   const [stocks, setStocks] = useState<BullPickAnalysis[]>([]);
   const [market, setMarket] = useState<MarketStatus | null>(null);
   const [industries, setIndustries] = useState<IndustrySector[]>([]);
+  const [stocksByIndustry, setStocksByIndustry] = useState<Record<string, IndustryStockEntry[]>>({});
   const [filter, setFilter] = useState<BullPickFilter>({ ...BULL_PICK_DEFAULTS });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -47,8 +48,11 @@ export default function Dashboard() {
   // Auto-load industry flow on mount (no scan needed)
   useEffect(() => {
     fetchIndustryFlow()
-      .then((sectors) => {
-        if (sectors.length > 0) setIndustries(sectors);
+      .then((flowData) => {
+        if (flowData.sectors.length > 0) {
+          setIndustries(flowData.sectors);
+          setStocksByIndustry(flowData.stocksByIndustry);
+        }
       })
       .catch(() => {});
   }, []);
@@ -69,6 +73,7 @@ export default function Dashboard() {
       setStocks(result.stocks ?? []);
       setMarket(result.market ?? null);
       setIndustries(result.industries ?? []);
+      setStocksByIndustry(result.stocksByIndustry ?? {});
       setScannedAt(result.scannedAt);
       setTotalScanned(result.scanned);
       setLatestDate(result.latestDate ?? '');
@@ -118,7 +123,7 @@ export default function Dashboard() {
       <MarketOverview />
 
       {/* Industry money flow — always visible */}
-      <IndustryHeatmap industries={industries} />
+      <IndustryHeatmap industries={industries} stocksByIndustry={stocksByIndustry} />
 
       {/* Filter bar */}
       <div style={{

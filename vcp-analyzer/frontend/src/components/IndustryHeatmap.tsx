@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { IndustrySector } from '../types';
+import { IndustrySector, IndustryStockEntry } from '../types';
 import { useColors, ThemeColors } from './ThemeContext';
 
 interface Props {
   industries: IndustrySector[];
+  stocksByIndustry: Record<string, IndustryStockEntry[]>;
 }
 
 // ── Squarified Treemap Layout ──
@@ -19,7 +20,6 @@ interface TreemapRect {
 function layoutTreemap(sectors: IndustrySector[], width: number, height: number): TreemapRect[] {
   if (sectors.length === 0 || width <= 0 || height <= 0) return [];
 
-  // Sort descending by absolute net buy
   const sorted = [...sectors]
     .filter(s => s.totalNetBuy !== 0)
     .sort((a, b) => Math.abs(b.totalNetBuy) - Math.abs(a.totalNetBuy));
@@ -29,86 +29,14 @@ function layoutTreemap(sectors: IndustrySector[], width: number, height: number)
   const totalValue = sorted.reduce((sum, s) => sum + Math.abs(s.totalNetBuy), 0);
   if (totalValue === 0) return [];
 
-  // Normalized values (area proportional to absolute net buy)
   const items = sorted.map(s => ({
     sector: s,
     value: Math.abs(s.totalNetBuy) / totalValue,
   }));
 
   const rects: TreemapRect[] = [];
-  squarify(items, 0, 0, width, height, rects);
+  sliceLayout(items, 0, 0, width, height, rects, true);
   return rects;
-}
-
-function squarify(
-  items: { sector: IndustrySector; value: number }[],
-  x: number, y: number, w: number, h: number,
-  rects: TreemapRect[],
-) {
-  if (items.length === 0) return;
-  if (items.length === 1) {
-    rects.push({ sector: items[0].sector, x, y, w, h });
-    return;
-  }
-
-  const totalValue = items.reduce((s, i) => s + i.value, 0);
-  if (totalValue === 0) return;
-
-  // Lay out along the shorter side
-  const vertical = w >= h;
-  const side = vertical ? h : w;
-
-  let rowItems: typeof items = [];
-  let rowValue = 0;
-  let bestAspect = Infinity;
-
-  for (let i = 0; i < items.length; i++) {
-    const testItems = [...rowItems, items[i]];
-    const testValue = rowValue + items[i].value;
-    const aspect = worstAspect(testItems.map(it => it.value), testValue, totalValue, side, vertical ? w : h);
-
-    if (aspect <= bestAspect) {
-      rowItems = testItems;
-      rowValue = testValue;
-      bestAspect = aspect;
-    } else {
-      // Lay out current row
-      const rowFrac = rowValue / totalValue;
-      const rowSize = (vertical ? w : h) * rowFrac;
-
-      let offset = 0;
-      for (const item of rowItems) {
-        const frac = item.value / rowValue;
-        const itemSize = side * frac;
-        if (vertical) {
-          rects.push({ sector: item.sector, x: x + offset * 0, y: y + offset * 0, w: rowSize, h: itemSize });
-          // Actually lay out correctly
-        } else {
-          // horizontal
-        }
-      }
-
-      // Reset — use simpler slice approach
-      break;
-    }
-  }
-
-  // Simpler approach: slice-and-dice
-  rects.length = 0;
-  sliceLayout(items, x, y, w, h, rects, true);
-}
-
-function worstAspect(values: number[], rowTotal: number, total: number, side: number, otherSide: number): number {
-  const rowSize = otherSide * (rowTotal / total);
-  if (rowSize === 0) return Infinity;
-  let worst = 0;
-  for (const v of values) {
-    const frac = v / rowTotal;
-    const itemLen = side * frac;
-    const aspect = Math.max(rowSize / itemLen, itemLen / rowSize);
-    if (aspect > worst) worst = aspect;
-  }
-  return worst;
 }
 
 // Slice-and-dice layout (alternating horizontal/vertical splits)
@@ -127,7 +55,6 @@ function sliceLayout(
   const total = items.reduce((s, i) => s + i.value, 0);
   if (total === 0) return;
 
-  // For better aspect ratios: split into two groups of roughly equal total value
   let bestSplit = 1;
   let bestDiff = Infinity;
   let runSum = 0;
@@ -163,7 +90,6 @@ function sliceLayout(
 function getHeatColor(netBuy: number, maxAbs: number, c: ThemeColors): string {
   if (netBuy === 0 || maxAbs === 0) return c.textMuted + '20';
   const intensity = Math.min(Math.abs(netBuy) / maxAbs, 1);
-  // Stronger flow = more saturated color
   const alpha = Math.round(15 + intensity * 40).toString(16).padStart(2, '0');
   return netBuy > 0 ? c.up + alpha : c.down + alpha;
 }
@@ -178,24 +104,30 @@ function getTextColor(netBuy: number, maxAbs: number, c: ThemeColors): string {
 
 type ViewMode = 'treemap' | 'bars';
 
-export default function IndustryHeatmap({ industries }: Props) {
+export default function IndustryHeatmap({ industries, stocksByIndustry }: Props) {
   const c = useColors();
   const [view, setView] = useState<ViewMode>('treemap');
   const [hovered, setHovered] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
 
   if (industries.length === 0) return null;
 
   const maxAbs = Math.max(...industries.map(g => Math.abs(g.totalNetBuy)), 1);
 
-  // Top industries for bar chart (top 15 by absolute net buy)
   const topIndustries = [...industries]
     .filter(g => g.totalNetBuy !== 0)
     .sort((a, b) => Math.abs(b.totalNetBuy) - Math.abs(a.totalNetBuy))
     .slice(0, 15);
 
-  // Treemap rects
   const TREEMAP_H = 340;
-  const rects = layoutTreemap(industries, 100, 100); // percent-based
+  const rects = layoutTreemap(industries, 100, 100);
+
+  const handleCellClick = (industry: string) => {
+    setSelected(selected === industry ? null : industry);
+  };
+
+  const selectedStocks = selected ? (stocksByIndustry[selected] ?? []) : [];
+  const selectedSector = selected ? industries.find(i => i.industry === selected) : null;
 
   return (
     <div style={{
@@ -229,11 +161,13 @@ export default function IndustryHeatmap({ industries }: Props) {
           {rects.map((r) => {
             const g = r.sector;
             const isHover = hovered === g.industry;
+            const isSelected = selected === g.industry;
             return (
               <div
                 key={g.industry}
                 onMouseEnter={() => setHovered(g.industry)}
                 onMouseLeave={() => setHovered(null)}
+                onClick={() => handleCellClick(g.industry)}
                 style={{
                   position: 'absolute',
                   left: `${r.x}%`, top: `${r.y}%`,
@@ -244,9 +178,11 @@ export default function IndustryHeatmap({ industries }: Props) {
                   display: 'flex', flexDirection: 'column',
                   justifyContent: 'center', alignItems: 'center',
                   padding: 4, overflow: 'hidden',
-                  cursor: 'default',
+                  cursor: 'pointer',
                   transition: 'filter 0.15s',
                   filter: isHover ? 'brightness(1.3)' : 'none',
+                  outline: isSelected ? `2px solid ${c.accent}` : 'none',
+                  outlineOffset: -2,
                 }}
               >
                 {r.w > 8 && r.h > 12 && (
@@ -268,8 +204,8 @@ export default function IndustryHeatmap({ industries }: Props) {
             );
           })}
 
-          {/* Tooltip on hover */}
-          {hovered && (() => {
+          {/* Tooltip on hover (only when not selected) */}
+          {hovered && !selected && (() => {
             const g = industries.find(i => i.industry === hovered);
             if (!g) return null;
             return (
@@ -315,31 +251,32 @@ export default function IndustryHeatmap({ industries }: Props) {
       {view === 'bars' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {topIndustries.map((g) => {
-            const ratio = g.totalNetBuy / maxAbs; // -1 to 1
-            const barWidth = Math.abs(ratio) * 50; // max 50% width
+            const ratio = g.totalNetBuy / maxAbs;
+            const barWidth = Math.abs(ratio) * 50;
             const isPositive = g.totalNetBuy > 0;
             const barColor = isPositive ? c.up : c.down;
+            const isSelected = selected === g.industry;
 
             return (
-              <div key={g.industry} style={{
+              <div key={g.industry} onClick={() => handleCellClick(g.industry)} style={{
                 display: 'grid', gridTemplateColumns: '90px 1fr 80px',
                 alignItems: 'center', gap: 8, height: 24,
+                cursor: 'pointer', borderRadius: 4,
+                background: isSelected ? c.accent + '18' : 'transparent',
+                padding: '0 4px',
+                transition: 'background 0.15s',
               }}>
-                {/* Industry name */}
                 <span style={{
-                  fontSize: 11, fontWeight: 600, color: c.text,
+                  fontSize: 11, fontWeight: isSelected ? 800 : 600, color: isSelected ? c.accent : c.text,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   textAlign: 'right',
                 }}>{g.industry}</span>
 
-                {/* Bar */}
                 <div style={{ position: 'relative', height: 16, display: 'flex', alignItems: 'center' }}>
-                  {/* Center line */}
                   <div style={{
                     position: 'absolute', left: '50%', top: 0, bottom: 0,
                     width: 1, background: c.border,
                   }} />
-                  {/* Bar fill */}
                   <div style={{
                     position: 'absolute',
                     left: isPositive ? '50%' : `${50 - barWidth}%`,
@@ -352,7 +289,6 @@ export default function IndustryHeatmap({ industries }: Props) {
                   }} />
                 </div>
 
-                {/* Value */}
                 <span style={{
                   fontSize: 11, fontWeight: 800,
                   color: isPositive ? c.up : c.down,
@@ -362,14 +298,158 @@ export default function IndustryHeatmap({ industries }: Props) {
             );
           })}
 
-          {/* Legend */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 4 }}>
             <span style={{ fontSize: 10, color: c.up }}>← 買超</span>
             <span style={{ fontSize: 10, color: c.down }}>賣超 →</span>
           </div>
         </div>
       )}
+
+      {/* Drill-down panel */}
+      {selected && selectedSector && (
+        <StockDrillDown
+          sector={selectedSector}
+          stocks={selectedStocks}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Drill-Down Panel ──
+
+function StockDrillDown({ sector, stocks, onClose }: {
+  sector: IndustrySector;
+  stocks: IndustryStockEntry[];
+  onClose: () => void;
+}) {
+  const c = useColors();
+  const [showAll, setShowAll] = useState(false);
+  const INITIAL_COUNT = 20;
+  const displayed = showAll ? stocks : stocks.slice(0, INITIAL_COUNT);
+  const hasMore = stocks.length > INITIAL_COUNT;
+
+  // Find max absolute for bar scaling
+  const maxAbs = Math.max(...stocks.map(s => Math.abs(s.totalNetBuy)), 1);
+
+  return (
+    <div style={{
+      borderTop: `1px solid ${c.border}`,
+      paddingTop: 12,
+      animation: 'fadeIn 0.2s ease-out',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: c.text }}>{sector.industry}</span>
+          <span style={{ fontSize: 11, color: c.textMuted }}>
+            {stocks.length} 支有法人交易
+          </span>
+          <span style={{
+            fontSize: 12, fontWeight: 800,
+            color: sector.totalNetBuy > 0 ? c.up : sector.totalNetBuy < 0 ? c.down : c.textMuted,
+          }}>
+            合計 {fmtNetBuy(sector.totalNetBuy)} 張
+          </span>
+        </div>
+        <button onClick={onClose} style={{
+          background: 'transparent', border: `1px solid ${c.border}`, borderRadius: 5,
+          padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          color: c.textMuted,
+        }}>收起</button>
+      </div>
+
+      {/* Column headers */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '60px 1fr 80px 80px 80px 80px',
+        gap: 4, padding: '0 4px 6px',
+        borderBottom: `1px solid ${c.border}`,
+      }}>
+        {['代號', '名稱', '股價', '外資', '投信', '合計'].map((h, i) => (
+          <span key={h} style={{
+            fontSize: 10, fontWeight: 700, color: c.textDim,
+            textAlign: i >= 2 ? 'right' : 'left',
+            letterSpacing: '0.04em',
+          }}>{h}</span>
+        ))}
+      </div>
+
+      {/* Stock rows */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {displayed.map((s) => (
+          <StockRow key={s.symbol} stock={s} maxAbs={maxAbs} />
+        ))}
+      </div>
+
+      {/* Show more */}
+      {hasMore && !showAll && (
+        <button onClick={() => setShowAll(true)} style={{
+          background: 'transparent', border: `1px solid ${c.border}`, borderRadius: 6,
+          padding: '6px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          color: c.textMuted, width: '100%', marginTop: 6,
+        }}>
+          顯示全部 {stocks.length} 支
+        </button>
+      )}
+    </div>
+  );
+}
+
+function StockRow({ stock, maxAbs }: { stock: IndustryStockEntry; maxAbs: number }) {
+  const c = useColors();
+  const s = stock;
+  const barRatio = Math.abs(s.totalNetBuy) / maxAbs;
+  const barWidth = Math.min(barRatio * 100, 100);
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '60px 1fr 80px 80px 80px 80px',
+      gap: 4, padding: '5px 4px',
+      alignItems: 'center',
+      borderBottom: `1px solid ${c.border}22`,
+      position: 'relative',
+    }}>
+      {/* Background bar for visual weight */}
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0,
+        width: `${barWidth}%`,
+        background: s.totalNetBuy > 0 ? c.up + '08' : s.totalNetBuy < 0 ? c.down + '08' : 'transparent',
+        pointerEvents: 'none',
+      }} />
+
+      <span style={{ fontSize: 12, fontWeight: 700, color: c.accent, position: 'relative' }}>
+        {s.symbol}
+      </span>
+      <span style={{
+        fontSize: 11, color: c.textSecondary, position: 'relative',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+      }}>
+        {s.name}
+      </span>
+      <span style={{ fontSize: 11, fontWeight: 600, color: c.text, textAlign: 'right', position: 'relative' }}>
+        {s.price > 0 ? s.price.toFixed(s.price >= 100 ? 0 : 1) : '—'}
+      </span>
+      <NetBuyCell value={s.foreignNetBuy} />
+      <NetBuyCell value={s.trustNetBuy} />
+      <NetBuyCell value={s.totalNetBuy} bold />
+    </div>
+  );
+}
+
+function NetBuyCell({ value, bold }: { value: number; bold?: boolean }) {
+  const c = useColors();
+  const color = value > 0 ? c.up : value < 0 ? c.down : c.textDim;
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: bold ? 800 : 600, color,
+      textAlign: 'right', position: 'relative',
+      fontVariantNumeric: 'tabular-nums',
+    }}>
+      {fmtNetBuy(value)}
+    </span>
   );
 }
 

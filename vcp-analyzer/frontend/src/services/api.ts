@@ -1,7 +1,7 @@
 // Frontend-only API: fetches data via Vercel serverless proxies,
 // then runs analysis in the browser.
 
-import { BullPickAnalysis, BullPickScanResult, MarketStatus, StockChartData, OHLCV, IndustrySector } from '../types';
+import { BullPickAnalysis, BullPickScanResult, MarketStatus, StockChartData, OHLCV, IndustrySector, IndustryFlowData, IndustryStockEntry } from '../types';
 import { analyze, parseYahooChart, BullPickParams, InstitutionEntry, RevenueEntry } from './scanner';
 import { INDUSTRY_MAP } from '../data/industryMap';
 
@@ -327,7 +327,8 @@ export async function scanBullPick(
   console.log(`[scanner] ${total} stocks loaded (TWSE+TPEx), institution: ${Object.keys(instMap).length}`);
 
   // Compute industry sectors from ALL stocks (not just filtered)
-  const industries = computeIndustrySectors(stocks, instMap, indMap);
+  const flowData = computeIndustrySectors(stocks, instMap, indMap);
+  const industries = flowData.sectors;
   console.log(`[scanner] ${industries.length} industry sectors computed`);
 
   // Step 2: Fetch charts in batches and analyze
@@ -439,6 +440,7 @@ export async function scanBullPick(
     stocks: results,
     market: market ?? { indexPrice: 0, ma20: 0, ma60: 0, ma120: 0, trend: 'neutral', trendLabel: '無資料' },
     industries,
+    stocksByIndustry: flowData.stocksByIndustry,
     scannedAt: new Date().toISOString(),
     total: results.length,
     scanned: total,
@@ -514,7 +516,7 @@ function computeIndustrySectors(
   stocks: StockListItem[],
   instMap: Record<string, InstitutionEntry>,
   indMap: Record<string, { industry: string; concept: string }>,
-): IndustrySector[] {
+): IndustryFlowData {
   const map = new Map<string, {
     count: number;
     changes: number[];
@@ -525,6 +527,7 @@ function computeIndustrySectors(
     topBuySymbol: string;
     topBuyName: string;
   }>();
+  const stocksByIndustry: Record<string, IndustryStockEntry[]> = {};
 
   for (const s of stocks) {
     const code = s.symbol.replace(/\.(TW|TWO)$/, '');
@@ -555,15 +558,32 @@ function computeIndustrySectors(
         g.topBuySymbol = code;
         g.topBuyName = s.name;
       }
+
+      // Collect per-stock entries (only stocks with institution data)
+      if (!stocksByIndustry[industry]) stocksByIndustry[industry] = [];
+      stocksByIndustry[industry].push({
+        symbol: code,
+        name: s.name,
+        price: s.close,
+        foreignNetBuy: Math.round(foreignLots),
+        trustNetBuy: Math.round(trustLots),
+        dealerNetBuy: Math.round(inst.dealerNetBuy ?? 0),
+        totalNetBuy: Math.round(totalLots),
+      });
     }
   }
 
-  const result: IndustrySector[] = [];
+  // Sort per-stock entries by totalNetBuy descending
+  for (const key of Object.keys(stocksByIndustry)) {
+    stocksByIndustry[key].sort((a, b) => b.totalNetBuy - a.totalNetBuy);
+  }
+
+  const sectors: IndustrySector[] = [];
   for (const [industry, g] of map) {
-    result.push({
+    sectors.push({
       industry,
       stockCount: g.count,
-      avgChangePct: 0, // We don't have change% for all stocks without chart data
+      avgChangePct: 0,
       totalNetBuy: Math.round(g.totalNet),
       foreignNetBuy: Math.round(g.foreignNet),
       trustNetBuy: Math.round(g.trustNet),
@@ -573,14 +593,13 @@ function computeIndustrySectors(
     });
   }
 
-  // Sort by absolute total net buy descending (show where money is flowing)
-  result.sort((a, b) => Math.abs(b.totalNetBuy) - Math.abs(a.totalNetBuy));
-  return result;
+  sectors.sort((a, b) => Math.abs(b.totalNetBuy) - Math.abs(a.totalNetBuy));
+  return { sectors, stocksByIndustry };
 }
 
 // ── Standalone Industry Flow (no full scan needed) ──
 
-export async function fetchIndustryFlow(): Promise<IndustrySector[]> {
+export async function fetchIndustryFlow(): Promise<IndustryFlowData> {
   // Fetch stock list + institution data + industry classification in parallel
   const [stockListRes, instRes, indRes] = await Promise.all([
     fetchJSON<StockListResponse>('/api/stocks?minPrice=0&minVolume=0'),
@@ -595,7 +614,7 @@ export async function fetchIndustryFlow(): Promise<IndustrySector[]> {
   console.log(`[industryFlow] stocks=${stocks.length}, institution=${Object.keys(instMap).length}`);
 
   if (stocks.length === 0 || Object.keys(instMap).length === 0) {
-    return [];
+    return { sectors: [], stocksByIndustry: {} };
   }
 
   return computeIndustrySectors(stocks, instMap, indMap);

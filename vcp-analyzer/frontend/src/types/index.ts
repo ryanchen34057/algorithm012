@@ -353,6 +353,16 @@ export interface BullPickAnalysis {
   scoreBreakdown: ScoreBreakdown;
 }
 
+export interface IndustryStockEntry {
+  symbol: string;
+  name: string;
+  price: number;
+  foreignNetBuy: number;
+  trustNetBuy: number;
+  dealerNetBuy: number;
+  totalNetBuy: number;
+}
+
 export interface IndustrySector {
   industry: string;
   stockCount: number;
@@ -365,10 +375,16 @@ export interface IndustrySector {
   topBuyAmount: number;
 }
 
+export interface IndustryFlowData {
+  sectors: IndustrySector[];
+  stocksByIndustry: Record<string, IndustryStockEntry[]>;
+}
+
 export interface BullPickScanResult {
   stocks: BullPickAnalysis[];
   market: MarketStatus;
   industries: IndustrySector[];
+  stocksByIndustry: Record<string, IndustryStockEntry[]>;
   scannedAt: string;
   total: number;
   scanned: number;
