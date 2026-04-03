@@ -603,6 +603,29 @@ function computeIndustrySectors(
   return result;
 }
 
+// ── Standalone Industry Flow (no full scan needed) ──
+
+export async function fetchIndustryFlow(): Promise<IndustrySector[]> {
+  // Fetch stock list + institution data + industry classification in parallel
+  const [stockListRes, instRes, indRes] = await Promise.all([
+    fetchJSON<StockListResponse>('/api/stocks?minPrice=0&minVolume=0'),
+    fetchJSON<InstitutionResponse>('/api/institution'),
+    fetchJSON<IndustryResponse>('/api/industry').catch(() => ({ data: {}, count: 0 } as IndustryResponse)),
+  ]);
+
+  const stocks = stockListRes.stocks ?? [];
+  const instMap = instRes.data ?? {};
+  const indMap = indRes.data ?? {};
+
+  console.log(`[industryFlow] stocks=${stocks.length}, institution=${Object.keys(instMap).length}`);
+
+  if (stocks.length === 0 || Object.keys(instMap).length === 0) {
+    return [];
+  }
+
+  return computeIndustrySectors(stocks, instMap, indMap);
+}
+
 function calcMAArray(data: number[], period: number): number[] {
   const result: number[] = [];
   for (let i = 0; i < data.length; i++) {

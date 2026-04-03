@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { scanBullPick } from '../services/api';
+import { useState, useEffect } from 'react';
+import { scanBullPick, fetchIndustryFlow } from '../services/api';
 import { BullPickAnalysis, MarketStatus, IndustrySector } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
@@ -43,6 +43,15 @@ export default function Dashboard() {
   const [totalScanned, setTotalScanned] = useState(0);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [latestDate, setLatestDate] = useState('');
+
+  // Auto-load industry flow on mount (no scan needed)
+  useEffect(() => {
+    fetchIndustryFlow()
+      .then((sectors) => {
+        if (sectors.length > 0) setIndustries(sectors);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleScan = async () => {
     setLoading(true);
