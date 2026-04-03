@@ -117,6 +117,9 @@ export default function Dashboard() {
       {/* Global indices */}
       <MarketOverview />
 
+      {/* Industry money flow — always visible */}
+      <IndustryHeatmap industries={industries} />
+
       {/* Filter bar */}
       <div style={{
         background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10,
@@ -252,9 +255,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
-      {/* Industry heatmap */}
-      <IndustryHeatmap industries={industries} />
 
       {/* Stock cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
