@@ -296,7 +296,7 @@ export async function scanBullPick(
   // Step 1: Fetch stock list + institution data + market status in parallel
   let stockListRes = await Promise.all([
     fetchJSON<StockListResponse>(`/api/stocks?minPrice=${p.minPrice}&minVolume=0`),
-    fetchJSON<InstitutionResponse>('/api/institution'),
+    fetchJSON<InstitutionResponse>('/api/institution?days=20'),
     fetchMarketStatus(),
   ]).then(([s, i, m]) => ({ stockListRes: s, instRes: i, market: m }));
 
@@ -605,7 +605,7 @@ export async function fetchIndustryFlow(): Promise<IndustryFlowData> {
   // Fetch stock list + institution data + industry classification in parallel
   const [stockListRes, instRes, indRes] = await Promise.all([
     fetchJSON<StockListResponse>('/api/stocks?minPrice=0&minVolume=0'),
-    fetchJSON<InstitutionResponse>('/api/institution'),
+    fetchJSON<InstitutionResponse>('/api/institution?days=20'),
     fetchJSON<IndustryResponse>('/api/industry').catch(() => ({ data: {}, count: 0 } as IndustryResponse)),
   ]);
 

@@ -1,5 +1,6 @@
 // Vercel Serverless Function: Proxy TWSE/TPEx institutional buying data
-export const config = { regions: ['hkg1'] };
+// Supports ?days=N to accumulate N trading days (default: 1)
+export const config = { regions: ['hkg1'], maxDuration: 30 };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
 export default async function handler(req: any, res: any) {
@@ -7,30 +8,54 @@ export default async function handler(req: any, res: any) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  try {
-    const now = new Date();
-    let twseData: Record<string, InstitutionEntry> = {};
-    let tpexData: Record<string, InstitutionEntry> = {};
+  const days = Math.min(Math.max(parseInt(req.query?.days) || 1, 1), 20);
 
-    for (let offset = 0; offset < 7; offset++) {
+  try {
+    // Collect candidate trading dates (skip weekends)
+    const candidates: Date[] = [];
+    const now = new Date();
+    for (let offset = 0; candidates.length < days + 10 && offset < 45; offset++) {
       const d = new Date(now);
       d.setDate(d.getDate() - offset);
       if (d.getDay() === 0 || d.getDay() === 6) continue;
-
-      const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-      const twseURL = `https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date=${dateStr}&selectType=ALLBUT0999`;
-      const r = await fetch(twseURL, { headers: { 'User-Agent': UA } });
-      if (!r.ok) continue;
-      const body = await r.json();
-      if (body.stat !== 'OK' || !body.data?.length) continue;
-
-      twseData = parseTWSE(body);
-      tpexData = await fetchTPEx(d);
-      break;
+      candidates.push(new Date(d));
     }
 
-    const merged = { ...twseData, ...tpexData };
-    res.json({ data: merged, count: Object.keys(merged).length });
+    // Fetch all dates in parallel (batch of 5 to avoid rate limit)
+    const BATCH = 5;
+    const accumulated: Record<string, InstitutionEntry> = {};
+    let tradingDaysFound = 0;
+
+    for (let i = 0; i < candidates.length && tradingDaysFound < days; i += BATCH) {
+      const batch = candidates.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map(d => fetchOneDay(d)));
+
+      for (const dayData of results) {
+        if (!dayData || Object.keys(dayData).length === 0) continue;
+        tradingDaysFound++;
+        if (tradingDaysFound > days) break;
+
+        for (const [sym, entry] of Object.entries(dayData)) {
+          if (!accumulated[sym]) {
+            accumulated[sym] = { foreignNetBuy: 0, trustNetBuy: 0, dealerNetBuy: 0, totalNetBuy: 0 };
+          }
+          accumulated[sym].foreignNetBuy += entry.foreignNetBuy;
+          accumulated[sym].trustNetBuy += entry.trustNetBuy;
+          accumulated[sym].dealerNetBuy += entry.dealerNetBuy;
+          accumulated[sym].totalNetBuy += entry.totalNetBuy;
+        }
+      }
+    }
+
+    // Round accumulated values
+    for (const entry of Object.values(accumulated)) {
+      entry.foreignNetBuy = Math.round(entry.foreignNetBuy);
+      entry.trustNetBuy = Math.round(entry.trustNetBuy);
+      entry.dealerNetBuy = Math.round(entry.dealerNetBuy);
+      entry.totalNetBuy = Math.round(entry.totalNetBuy);
+    }
+
+    res.json({ data: accumulated, count: Object.keys(accumulated).length, days: tradingDaysFound });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -41,6 +66,23 @@ interface InstitutionEntry {
   trustNetBuy: number;
   dealerNetBuy: number;
   totalNetBuy: number;
+}
+
+async function fetchOneDay(d: Date): Promise<Record<string, InstitutionEntry> | null> {
+  try {
+    const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    const twseURL = `https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date=${dateStr}&selectType=ALLBUT0999`;
+    const r = await fetch(twseURL, { headers: { 'User-Agent': UA } });
+    if (!r.ok) return null;
+    const body = await r.json();
+    if (body.stat !== 'OK' || !body.data?.length) return null;
+
+    const twseData = parseTWSE(body);
+    const tpexData = await fetchTPEx(d);
+    return { ...twseData, ...tpexData };
+  } catch {
+    return null;
+  }
 }
 
 function parseTWSE(body: { fields: string[]; data: string[][] }): Record<string, InstitutionEntry> {

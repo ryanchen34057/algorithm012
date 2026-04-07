@@ -202,7 +202,7 @@ export default function BullPickRow({ stock }: Props) {
               <Row label="高點日期" value={stock.allTimeHighDate} color={c.textMuted} c={c} />
             </DetailSection>
 
-            <DetailSection title="三大法人（張）">
+            <DetailSection title="三大法人 近20日（張）">
               <Row label="外資" value={fmtNetBuy(stock.foreignNetBuy)} color={nbColor(stock.foreignNetBuy, c)} c={c} />
               <Row label="投信" value={fmtNetBuy(stock.trustNetBuy)} color={nbColor(stock.trustNetBuy, c)} c={c} />
               <Row label="自營" value={fmtNetBuy(stock.dealerNetBuy)} color={nbColor(stock.dealerNetBuy, c)} c={c} />

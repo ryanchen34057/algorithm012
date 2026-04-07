@@ -136,7 +136,7 @@ export default function IndustryHeatmap({ industries, stocksByIndustry }: Props)
     }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: c.text }}>法人資金流向（全市場）</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: c.text }}>法人資金流向 近20日（全市場）</span>
         <div style={{ display: 'flex', gap: 0, borderRadius: 5, overflow: 'hidden', border: `1px solid ${c.border}` }}>
           <button onClick={() => setView('treemap')} style={{
             padding: '3px 12px', fontSize: 11, fontWeight: 700, border: 'none', cursor: 'pointer',
