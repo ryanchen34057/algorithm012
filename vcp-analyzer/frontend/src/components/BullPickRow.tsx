@@ -216,6 +216,13 @@ export default function BullPickRow({ stock }: Props) {
                 color={stock.revenueGrowth > 20 ? c.up : stock.revenueGrowth > 0 ? c.yellow : stock.revenueGrowth < 0 ? c.down : c.textMuted} c={c} bold />
             </DetailSection>
 
+            <DetailSection title="成交量">
+              <Row label="日均量" value={`${Math.round(stock.adv20)} 張`} color={c.text} c={c} />
+              <Row label="5日量縮" value={stock.volShrinkPct > 0 ? `${stock.volShrinkPct}%` : '無量縮'}
+                color={stock.volShrinkPct >= 30 ? c.up : stock.volShrinkPct > 0 ? c.yellow : c.textMuted} c={c}
+                bold={stock.volShrinkPct >= 30} />
+            </DetailSection>
+
             <DetailSection title="交易計畫">
               <Row label="停損" value={`${stock.stopLoss}`} color="#ef4444" c={c} sub={stock.stopLabel} />
               <Row label="T1" value={`${stock.target}`} color="#22c55e" c={c} sub={stock.targetLabel}

@@ -15,11 +15,12 @@ interface BullPickFilter {
   minVolume: number;
   distHighMax: number;
   minScore: number;
+  requireVolShrink: boolean;
 }
 
 const BULL_PICK_DEFAULTS: BullPickFilter = {
   minPrice: 15, maxPrice: 9999, minVolume: 300,
-  distHighMax: 10, minScore: 40,
+  distHighMax: 10, minScore: 40, requireVolShrink: false,
 };
 
 const RANK_TIERS = [
@@ -66,7 +67,7 @@ export default function Dashboard() {
         {
           minPrice: filter.minPrice, maxPrice: filter.maxPrice,
           minVolume: filter.minVolume, distHighMax: filter.distHighMax,
-          minScore: filter.minScore,
+          minScore: filter.minScore, requireVolShrink: filter.requireVolShrink,
         },
         (done, total) => setProgress({ done, total }),
       );
@@ -139,6 +140,20 @@ export default function Dashboard() {
           <FilterGroup label="篩選條件">
             <FilterInput label="距高點上限 %" value={filter.distHighMax} onChange={(v) => setFilter((f) => ({ ...f, distHighMax: v }))} hint="建議 10" c={c} />
             <FilterInput label="最低分數" value={filter.minScore} onChange={(v) => setFilter((f) => ({ ...f, minScore: v }))} hint="0-100" c={c} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'flex-end' }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                fontSize: 12, color: filter.requireVolShrink ? c.accent : c.textSecondary,
+                fontWeight: filter.requireVolShrink ? 700 : 400,
+                userSelect: 'none',
+              }}>
+                <input type="checkbox" checked={filter.requireVolShrink}
+                  onChange={(e) => setFilter((f) => ({ ...f, requireVolShrink: e.target.checked }))}
+                  style={{ accentColor: c.accent, width: 14, height: 14, cursor: 'pointer' }} />
+                5日量縮
+              </label>
+              <span style={{ color: c.textDim, fontSize: 10 }}>近5日均量 &lt; 20日均量</span>
+            </div>
           </FilterGroup>
         </div>
 

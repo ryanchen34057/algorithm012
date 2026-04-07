@@ -349,6 +349,7 @@ export interface BullPickAnalysis {
   rewardRisk: number;
   adv20: number;
   todayVolume: number;
+  volShrinkPct: number;    // 5日量縮幅度 (%)
   score: number;
   scoreBreakdown: ScoreBreakdown;
 }

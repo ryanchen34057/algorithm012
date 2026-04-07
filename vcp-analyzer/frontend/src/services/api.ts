@@ -277,6 +277,7 @@ export interface BullPickScanParams {
   minVolume?: number;
   distHighMax?: number;
   minScore?: number;
+  requireVolShrink?: boolean;
 }
 
 export async function scanBullPick(
@@ -289,6 +290,7 @@ export async function scanBullPick(
     minADV20Lots: params.minVolume ?? 300,
     distHighMax: params.distHighMax ?? 10,
     minScore: params.minScore ?? 40,
+    requireVolShrink: params.requireVolShrink ?? false,
   };
 
   // Step 1: Fetch stock list + institution data + market status in parallel

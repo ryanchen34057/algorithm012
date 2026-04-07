@@ -30,6 +30,7 @@ export interface BullPickParams {
   minADV20Lots: number;
   distHighMax: number;
   minScore: number;
+  requireVolShrink: boolean;  // 是否要求5日內有量縮
 }
 
 // ── Main Analyze Function ──
@@ -54,6 +55,14 @@ export function analyze(
 
   const adv20 = avgVolumeN(candles, 20) / 1000;
   if (adv20 < params.minADV20Lots) return null;
+
+  // Volume contraction: avg vol of last 5 days vs avg vol of prior 20 days
+  const vol5d = avgVolumeN(candles, 5);
+  const vol20d = avgVolumeN(candles, 20);
+  const volShrinkPct = vol20d > 0 ? r2((1 - vol5d / vol20d) * 100) : 0;
+
+  // Hard filter: require volume contraction (5日均量 < 20日均量)
+  if (params.requireVolShrink && volShrinkPct <= 0) return null;
 
   // MAs
   const closes = candles.map((c) => c.close);
@@ -196,6 +205,7 @@ export function analyze(
     rewardRisk: rr,
     adv20: r2(adv20),
     todayVolume: today.volume,
+    volShrinkPct,
     score,
     scoreBreakdown,
   };
