@@ -35,9 +35,12 @@ async function fetchCrumb(): Promise<void> {
   }
 }
 
+import { setCacheHeaders } from './_cache';
+
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  // 營收資料月更：一律快取 6 小時
+  setCacheHeaders(res, { duringMarket: 21600, afterMarket: 21600 });
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   const symbol = req.query.symbol as string;

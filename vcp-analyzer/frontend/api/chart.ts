@@ -1,10 +1,12 @@
 // Vercel Serverless Function: Proxy Yahoo Finance chart API
 export const config = { regions: ['hkg1'] };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+import { setCacheHeaders } from './_cache';
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  // K線資料：盤中快取 3 分鐘，盤後快取 1 小時
+  setCacheHeaders(res, { duringMarket: 180, afterMarket: 3600 });
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   const symbol = req.query.symbol as string;

@@ -2,10 +2,12 @@
 // Supports ?days=N to accumulate N trading days (default: 1)
 export const config = { regions: ['hkg1'], maxDuration: 30 };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+import { setCacheHeaders } from './_cache';
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  // 法人資料盤後才更新：盤中不快取，盤後快取 2 小時
+  setCacheHeaders(res, { duringMarket: 0, afterMarket: 7200 });
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   const days = Math.min(Math.max(parseInt(req.query?.days) || 1, 1), 20);

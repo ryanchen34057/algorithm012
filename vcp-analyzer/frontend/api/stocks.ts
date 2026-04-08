@@ -21,9 +21,12 @@ interface StockInfo {
   date: string;
 }
 
+import { setCacheHeaders } from './_cache';
+
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  // 股票清單：盤中快取 5 分鐘，盤後快取 1 小時
+  setCacheHeaders(res, { duringMarket: 300, afterMarket: 3600 });
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   const minPrice = Number(req.query.minPrice) || 15;
