@@ -126,7 +126,7 @@ export async function fetchTaifex(): Promise<TaifexQuote | null> {
     if (data.error || !data.price) return null;
     return {
       symbol: data.symbol ?? 'TX',
-      name: data.session === 'night' ? '台指夜盤' : '台指期貨',
+      name: data.name ?? (data.session === 'night' ? '台指夜盤' : '台指期貨'),
       price: data.price,
       change: data.change ?? 0,
       changePct: data.changePct ?? 0,
