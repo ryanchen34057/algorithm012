@@ -1,6 +1,7 @@
 // Vercel Serverless Function: Proxy TWSE/TPEx institutional buying data
 // Supports ?days=N to accumulate N trading days (default: 1)
-export const config = { regions: ['hkg1'], maxDuration: 30 };
+// Gracefully returns partial data if approaching timeout
+export const config = { regions: ['hkg1'], maxDuration: 60 };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 import { setCacheHeaders } from './_cache';
 
@@ -11,6 +12,9 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   const days = Math.min(Math.max(parseInt(req.query?.days) || 1, 1), 20);
+  const startTime = Date.now();
+  // Leave 1.5s buffer before Vercel kills us (free=10s, pro=60s)
+  const TIMEOUT_MS = 8500;
 
   try {
     // Collect candidate trading dates (skip weekends)
@@ -23,12 +27,17 @@ export default async function handler(req: any, res: any) {
       candidates.push(new Date(d));
     }
 
-    // Fetch all dates in parallel (batch of 5 to avoid rate limit)
-    const BATCH = 5;
+    // Fetch dates in parallel batches, stop if approaching timeout
+    const BATCH = 3; // smaller batches to reduce per-batch time
     const accumulated: Record<string, InstitutionEntry> = {};
     let tradingDaysFound = 0;
 
     for (let i = 0; i < candidates.length && tradingDaysFound < days; i += BATCH) {
+      // Check timeout before starting a new batch
+      if (Date.now() - startTime > TIMEOUT_MS) {
+        break;
+      }
+
       const batch = candidates.slice(i, i + BATCH);
       const results = await Promise.all(batch.map(d => fetchOneDay(d)));
 
