@@ -109,7 +109,7 @@ export function analyze(
     pattern, maAligned, distHighPct, params.distHighMax,
     totalNetBuy, foreignNetBuy, trustNetBuy,
     revenueGrowth,
-    price, ma20, ma60,
+    price, ma20, ma60, adv20,
   );
 
   if (score < params.minScore) return null;
@@ -365,7 +365,7 @@ export function rescoreWithRevenue(stock: BullPickAnalysis): void {
     stock.pattern, stock.maAligned, stock.distHighPct, 999,
     stock.totalNetBuy, stock.foreignNetBuy, stock.trustNetBuy,
     stock.revenueGrowth,
-    stock.currentPrice, stock.ma20, stock.ma60,
+    stock.currentPrice, stock.ma20, stock.ma60, stock.adv20,
   );
   stock.score = score;
   stock.scoreBreakdown = breakdown;
@@ -375,7 +375,7 @@ function calcBullPickScore(
   pattern: PatternShapeType, maAligned: boolean, distHighPct: number, distHighMax: number,
   totalNetBuy: number, foreignNetBuy: number, trustNetBuy: number,
   revenueGrowth: number,
-  price: number, ma20: number, ma60: number,
+  price: number, ma20: number, ma60: number, adv20: number,
 ): { score: number; breakdown: ScoreBreakdown } {
   // ① Pattern (0-20)
   let patternScore = 5;
@@ -400,20 +400,31 @@ function calcBullPickScore(
   else if (distHighPct < 15) distScore = 10;
   else if (distHighPct < 20) distScore = 6;
 
-  // ④ Institutional buying (0-25)
+  // ④ Institutional buying (0-25) — use relative ratio (net buy / ADV20)
+  // This prevents large-cap stocks (e.g. financials) from getting inflated scores
+  // just because their absolute net buy numbers are large
+  const safeADV = adv20 > 0 ? adv20 : 1;
+  const totalRatio = totalNetBuy / safeADV;     // 20日合計買超 / 日均量
+  const foreignRatio = foreignNetBuy / safeADV;
+  const trustRatio = trustNetBuy / safeADV;
+
   let instScore = 0;
-  if (totalNetBuy > 1000) instScore += 10;
-  else if (totalNetBuy > 500) instScore += 8;
-  else if (totalNetBuy > 100) instScore += 6;
-  else if (totalNetBuy > 0) instScore += 4;
+  // Part A: total net buy ratio (0-10)
+  if (totalRatio > 2) instScore += 10;
+  else if (totalRatio > 1) instScore += 8;
+  else if (totalRatio > 0.3) instScore += 6;
+  else if (totalRatio > 0) instScore += 4;
   else instScore += 1;
 
-  if (foreignNetBuy > 0 && trustNetBuy > 0) instScore += 8;
-  else if (foreignNetBuy > 0 || trustNetBuy > 0) instScore += 4;
+  // Part B: foreign + trust sync bonus (0-8)
+  if (foreignRatio > 0.1 && trustRatio > 0.1) instScore += 8;
+  else if (foreignRatio > 0 && trustRatio > 0) instScore += 6;
+  else if (foreignRatio > 0 || trustRatio > 0) instScore += 4;
 
-  if (trustNetBuy > 100) instScore += 7;
-  else if (trustNetBuy > 50) instScore += 5;
-  else if (trustNetBuy > 0) instScore += 3;
+  // Part C: trust conviction (0-7)
+  if (trustRatio > 0.5) instScore += 7;
+  else if (trustRatio > 0.2) instScore += 5;
+  else if (trustRatio > 0) instScore += 3;
 
   instScore = Math.min(instScore, 25);
 
