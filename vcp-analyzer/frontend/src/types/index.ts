@@ -347,6 +347,7 @@ export interface BullPickAnalysis {
   target2: number;
   target2Label: string;
   rewardRisk: number;
+  upsidePct: number;         // T1 預估漲幅 (%)
   adv20: number;
   todayVolume: number;
   volShrinkPct: number;    // 5日量縮幅度 (%)

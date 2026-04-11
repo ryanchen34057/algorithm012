@@ -123,38 +123,52 @@ export function analyze(
     risk = price - finalStopLoss;
   }
 
-  // ATR(20) for volatility-based targets
+  // ATR(20) for volatility-based fallback targets
   const atr20 = calcATR(candles, n, 20);
 
-  // Find recent swing low for Fibonacci extension
-  let swingLow = price;
-  for (let i = Math.max(0, n - 60); i < n; i++) {
-    if (candles[i].low < swingLow) swingLow = candles[i].low;
-  }
-  const fibRange = allTimeHigh - swingLow;
+  // ── 林則行 Measured Move (等幅測量) ──
+  // Find swing structure: swing low → rally high → pullback low
+  // T1 = pullback low + first leg (equal leg projection)
+  // T2 = pullback low + 1.5 × first leg
+  const mm = findMeasuredMove(candles, n);
 
-  // Hybrid target calculation
   let target: number;
   let targetLabel: string;
   let target2: number;
   let target2Label: string;
 
-  if (distHighPct > 0) {
-    // T1: ATH (歷史高點 = 自然壓力位)
-    target = r2(allTimeHigh);
-    targetLabel = '歷史高點';
-    // T2: ATH + 1.5 × ATR(20) (突破後的動態延伸)
-    target2 = r2(allTimeHigh + 1.5 * atr20);
-    target2Label = 'ATH + 1.5×ATR';
+  if (mm) {
+    const mmT1 = r2(mm.pullbackLow + mm.firstLeg);
+    const mmT2 = r2(mm.pullbackLow + mm.firstLeg * 1.5);
+
+    if (distHighPct > 0 && allTimeHigh < mmT1) {
+      // Below ATH and ATH is below measured move → ATH is first resistance
+      target = r2(allTimeHigh);
+      targetLabel = '歷史高點';
+      target2 = mmT1;
+      target2Label = '等幅測量';
+    } else {
+      target = mmT1;
+      targetLabel = '等幅測量';
+      target2 = mmT2;
+      target2Label = '1.5倍等幅';
+    }
   } else {
-    // Already above ATH → use Fibonacci extensions from swing low to ATH
-    target = r2(swingLow + fibRange * 1.272);
-    targetLabel = 'Fib 1.272';
-    target2 = r2(swingLow + fibRange * 1.618);
-    target2Label = 'Fib 1.618';
+    // Fallback: no clear swing structure → use ATR
+    if (distHighPct > 0) {
+      target = r2(allTimeHigh);
+      targetLabel = '歷史高點';
+      target2 = r2(allTimeHigh + 1.5 * atr20);
+      target2Label = 'ATH+1.5×ATR';
+    } else {
+      target = r2(price + 2 * atr20);
+      targetLabel = '2×ATR';
+      target2 = r2(price + 3 * atr20);
+      target2Label = '3×ATR';
+    }
   }
 
-  // Sanity check: target must be above entry
+  // Sanity check: targets must be above entry
   if (target <= price) {
     target = r2(price + 2 * atr20);
     targetLabel = '2×ATR';
@@ -163,6 +177,9 @@ export function analyze(
     target2 = r2(price + 3 * atr20);
     target2Label = '3×ATR';
   }
+
+  // 林則行 20% rule: upside to T1
+  const upsidePct = r2(((target - price) / price) * 100);
 
   const rr = risk > 0 ? r2((target - price) / risk) : 0;
 
@@ -203,6 +220,7 @@ export function analyze(
     target2,
     target2Label,
     rewardRisk: rr,
+    upsidePct,
     adv20: r2(adv20),
     todayVolume: today.volume,
     volShrinkPct,
@@ -469,6 +487,56 @@ function calcStopLoss(candles: OHLCV[], n: number, price: number, ma20: number):
   if (support > ma20Stop && support < price) return [support, '近期支撐'];
   if (ma20Stop < price) return [ma20Stop, '20日均線'];
   return [r2(price * 0.95), '預設5%停損'];
+}
+
+// ── Measured Move (林則行 兩段式上漲) ──
+// Find: swing low → rally high → pullback low
+// Target = pullback low + (rally high - swing low)
+
+function findMeasuredMove(candles: OHLCV[], n: number): {
+  swingLow: number;
+  rallyHigh: number;
+  pullbackLow: number;
+  firstLeg: number;
+} | null {
+  const lb = Math.min(60, n - 10);
+  if (lb < 20) return null;
+  const start = n - lb;
+
+  // Step 1: Find swing low (谷底) — the lowest point in the lookback
+  let swingLowIdx = start;
+  for (let i = start + 1; i < n; i++) {
+    if (candles[i].low < candles[swingLowIdx].low) swingLowIdx = i;
+  }
+
+  // Step 2: Find rally high (第一段高點) — highest point after swing low
+  // Leave last 3 candles so there's room for a pullback
+  let rallyHighIdx = swingLowIdx;
+  for (let i = swingLowIdx + 1; i < n - 3; i++) {
+    if (candles[i].high > candles[rallyHighIdx].high) rallyHighIdx = i;
+  }
+
+  // Rally high must be meaningfully after swing low
+  if (rallyHighIdx - swingLowIdx < 5) return null;
+
+  // Step 3: Find pullback low (回調低點) — lowest point after rally high
+  let pullbackLowIdx = rallyHighIdx + 1;
+  if (pullbackLowIdx >= n) return null;
+  for (let i = rallyHighIdx + 1; i < n; i++) {
+    if (candles[i].low < candles[pullbackLowIdx].low) pullbackLowIdx = i;
+  }
+
+  const swingLow = candles[swingLowIdx].low;
+  const rallyHigh = candles[rallyHighIdx].high;
+  const pullbackLow = candles[pullbackLowIdx].low;
+  const firstLeg = rallyHigh - swingLow;
+
+  // Validate: first leg must be at least 5% of swing low
+  if (firstLeg / swingLow < 0.05) return null;
+  // Must have a real pullback (at least 10% retracement of first leg)
+  if ((rallyHigh - pullbackLow) / firstLeg < 0.10) return null;
+
+  return { swingLow, rallyHigh, pullbackLow, firstLeg };
 }
 
 // ── ATR (Average True Range) ──

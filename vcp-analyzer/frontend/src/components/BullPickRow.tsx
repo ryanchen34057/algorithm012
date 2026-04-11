@@ -229,6 +229,10 @@ export default function BullPickRow({ stock }: Props) {
                 tooltip={getT1Tooltip(stock.targetLabel)} />
               <Row label="T2" value={`${stock.target2}`} color="#16a34a" c={c} sub={stock.target2Label}
                 tooltip={getT2Tooltip(stock.target2Label)} />
+              <Row label="T1預估漲幅" value={`${stock.upsidePct > 0 ? '+' : ''}${stock.upsidePct}%`}
+                color={stock.upsidePct >= 20 ? c.up : stock.upsidePct >= 10 ? c.yellow : c.textMuted} c={c}
+                bold={stock.upsidePct >= 20}
+                tooltip="林則行建議：預估漲幅未達 20% 不買" />
               <Row label="風報比" value={stock.rewardRisk > 0 ? `1:${stock.rewardRisk}` : '-'}
                 color={stock.rewardRisk >= 3 ? c.up : c.blue} c={c} />
               <TargetExplainer stock={stock} c={c} />
@@ -389,28 +393,30 @@ function fmtNetBuy(v: number): string {
 }
 
 function getT1Tooltip(label: string): string {
+  if (label === '等幅測量')
+    return 'T1（等幅目標）= 回調低點 + 第一段漲幅\n林則行：股票從谷底反彈的漲幅，突破後會再走等幅的第二段。';
   if (label === '歷史高點')
-    return 'T1（保守目標）= 歷史最高價\n股價尚未突破前高，歷史高點為最直接的壓力位。';
-  if (label === 'Fib 1.272')
-    return 'T1（保守目標）= Fibonacci 1.272 延伸\n以近期低點到前高的波段幅度，乘以 1.272 倍投射。';
+    return 'T1（保守目標）= 歷史最高價\n前高是最直接的壓力位，先以此為第一目標。';
   if (label === '2×ATR')
-    return 'T1（保守目標）= 現價 + 2 × ATR(20)\nATR = 平均真實波幅，2 倍為短期合理獲利空間。';
-  return 'T1 = 第一目標價（保守）';
+    return 'T1 = 現價 + 2 × ATR(20)\n無明確波段結構時，以波動率估算。';
+  return 'T1 = 第一目標價';
 }
 
 function getT2Tooltip(label: string): string {
-  if (label === 'ATH + 1.5×ATR')
-    return 'T2（積極目標）= 歷史高點 + 1.5 × ATR(20)\n突破歷史高點後，再以波動率延伸。';
-  if (label === 'Fib 1.618')
-    return 'T2（積極目標）= Fibonacci 1.618（黃金比例）延伸\n適合趨勢強勁時的持股目標。';
+  if (label === '等幅測量')
+    return 'T2（等幅目標）= 回調低點 + 第一段漲幅\nATH 被突破後，以等幅投射做積極目標。';
+  if (label === '1.5倍等幅')
+    return 'T2（積極目標）= 回調低點 + 1.5 × 第一段漲幅\n趨勢強勁時，第二段可走到 1.5 倍。';
+  if (label === 'ATH+1.5×ATR')
+    return 'T2 = 歷史高點 + 1.5 × ATR(20)\n突破歷史高點後，以波動率延伸。';
   if (label === '3×ATR')
-    return 'T2（積極目標）= 現價 + 3 × ATR(20)\n中期較積極的獲利目標。';
+    return 'T2 = 現價 + 3 × ATR(20)';
   return 'T2 = 第二目標價（積極）';
 }
 
 function TargetExplainer({ stock, c }: { stock: BullPickAnalysis; c: ThemeColors }) {
   const [open, setOpen] = useState(false);
-  const belowATH = stock.distHighPct > 0;
+  const isMM = stock.targetLabel === '等幅測量' || stock.target2Label === '等幅測量' || stock.target2Label === '1.5倍等幅';
 
   return (
     <div style={{ marginTop: 4 }}>
@@ -429,36 +435,42 @@ function TargetExplainer({ stock, c }: { stock: BullPickAnalysis; c: ThemeColors
           background: c.bgInput, fontSize: 11, lineHeight: 1.7,
           color: c.textSecondary, border: `1px solid ${c.border}`,
         }}>
-          {belowATH ? (
+          {isMM ? (
             <>
-              <div>目前股價還沒突破歷史最高價 <b style={{ color: c.yellow }}>{stock.allTimeHigh}</b>，所以：</div>
+              <div><b style={{ color: c.yellow }}>林則行「兩段式上漲」</b></div>
               <div style={{ marginTop: 4 }}>
-                <b style={{ color: '#22c55e' }}>T1（保守目標）= 歷史最高價</b>
-                <br />前高就像天花板，股價漲到這裡常常會遇到賣壓，所以先設這裡為第一個目標。
+                股票從谷底反彈到高點，這段叫「第一段」。突破後回調再起漲，通常會再走<b>等幅的第二段</b>。
               </div>
+              <div style={{ marginTop: 4, padding: '4px 8px', background: c.border + '40', borderRadius: 4, fontSize: 10 }}>
+                第一段漲幅 = 反彈高點 - 谷底<br />
+                <b style={{ color: '#22c55e' }}>T1 = 回調低點 + 第一段漲幅</b>（等幅投射）<br />
+                <b style={{ color: '#16a34a' }}>T2 = 回調低點 + 1.5 × 第一段漲幅</b>（趨勢強時）
+              </div>
+              {stock.distHighPct > 0 && stock.targetLabel === '歷史高點' && (
+                <div style={{ marginTop: 4 }}>
+                  目前前高 <b style={{ color: c.yellow }}>{stock.allTimeHigh}</b> 低於等幅目標，所以 T1 先設在歷史高點（天花板壓力），T2 為等幅投射。
+                </div>
+              )}
               <div style={{ marginTop: 4 }}>
-                <b style={{ color: '#16a34a' }}>T2（積極目標）= 歷史高點 + 波動空間</b>
-                <br />如果股價衝過天花板，代表買盤很強，可以再多看一段。這段距離用股價每天平均波動幅度（ATR）來估算。
+                <b>門檻：</b>若預估漲幅不到 20%，風險報酬比不划算，建議跳過。
+                {stock.upsidePct < 20 && (
+                  <span style={{ color: '#ef4444', fontWeight: 700 }}> (目前僅 {stock.upsidePct}%)</span>
+                )}
               </div>
             </>
           ) : (
             <>
-              <div>股價已經創新高，沒有前面的天花板擋路了，所以用<b style={{ color: c.yellow }}>費波那契延伸</b>來估目標：</div>
+              <div>無法辨識明確的波段結構，改用 <b style={{ color: c.yellow }}>ATR（平均波動幅度）</b> 估算目標：</div>
               <div style={{ marginTop: 4 }}>
-                先量出最近一段「從低點漲到高點」的距離（像尺一樣量出漲了多少）。
+                <b style={{ color: '#22c55e' }}>T1 = 現價 + 2 倍日均波動</b>（短期合理空間）
               </div>
               <div style={{ marginTop: 4 }}>
-                <b style={{ color: '#22c55e' }}>T1 = 再往上延伸 27.2%</b>（Fib 1.272）
-                <br />保守估計，漲幅再多 ¼ 左右。
-              </div>
-              <div style={{ marginTop: 4 }}>
-                <b style={{ color: '#16a34a' }}>T2 = 再往上延伸 61.8%</b>（Fib 1.618，黃金比例）
-                <br />如果趨勢很強，漲幅可以再多 ⅝ 左右。這個 0.618 是大自然和金融市場中常出現的神奇比例。
+                <b style={{ color: '#16a34a' }}>T2 = 現價 + 3 倍日均波動</b>（中期積極目標）
               </div>
             </>
           )}
           <div style={{ marginTop: 6, color: c.textDim, fontSize: 10 }}>
-            停損 = 近期支撐位（底部低點或均線）。風報比 = 預期獲利 ÷ 可能虧損，越大越好。
+            停損 = 近期支撐位。風報比 = 預期獲利 ÷ 可能虧損，越大越好。
           </div>
         </div>
       )}
