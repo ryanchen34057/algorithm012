@@ -206,37 +206,37 @@ async function fetchChart(symbol: string): Promise<{ candles: OHLCV[]; name: str
     const name = meta?.shortName ?? meta?.symbol ?? symbol;
 
     // Find true all-time high from multiple sources:
-    // 1. Monthly candle highs (up to 20 years)
+    // 1. Monthly candle highs (up to 20 years) — value only, date is inaccurate (always 1st of month)
     // 2. meta.fiftyTwoWeekHigh (Yahoo server-side, unadjusted)
-    // 3. Daily candle highs (checked later in scanner.ts)
+    // 3. Daily candle highs — used to find the precise date
     let allTimeHigh = 0;
-    let allTimeHighDate = '';
 
-    // Source 1: Monthly candles
+    // Source 1: Monthly candles (value only)
     const monthlyCandles = parseYahooChart(monthlyData, symbol, '');
     if (monthlyCandles) {
       for (const c of monthlyCandles) {
-        if (c.high > allTimeHigh) {
-          allTimeHigh = c.high;
-          allTimeHighDate = c.date;
-        }
+        if (c.high > allTimeHigh) allTimeHigh = c.high;
       }
     }
 
-    // Source 2: meta.fiftyTwoWeekHigh (often more accurate than adjusted candle data)
+    // Source 2: meta.fiftyTwoWeekHigh
     const weekHigh52 = parseFloat(meta?.fiftyTwoWeekHigh ?? 0);
-    if (weekHigh52 > allTimeHigh) {
-      allTimeHigh = weekHigh52;
-      allTimeHighDate = ''; // Yahoo doesn't provide the date for 52wk high
-    }
+    if (weekHigh52 > allTimeHigh) allTimeHigh = weekHigh52;
 
-    // Source 3: monthly meta
     const monthlyMeta = (monthlyData as any)?.chart?.result?.[0]?.meta;
     const monthlyWeekHigh52 = parseFloat(monthlyMeta?.fiftyTwoWeekHigh ?? 0);
-    if (monthlyWeekHigh52 > allTimeHigh) {
-      allTimeHigh = monthlyWeekHigh52;
-      allTimeHighDate = '';
+    if (monthlyWeekHigh52 > allTimeHigh) allTimeHigh = monthlyWeekHigh52;
+
+    // Source 3: Daily candles — also find precise ATH date here
+    let allTimeHighDate = '';
+    for (const c of candles) {
+      if (c.high >= allTimeHigh) {
+        allTimeHigh = c.high;
+        allTimeHighDate = c.date;
+      }
     }
+    // If ATH came from monthly/meta (older than 2yr daily range), date stays empty
+    // which is better than showing a wrong date like "2026-03-01"
 
     return { candles, name, allTimeHigh: allTimeHigh || undefined, allTimeHighDate: allTimeHighDate || undefined };
   } catch {
