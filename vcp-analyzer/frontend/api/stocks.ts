@@ -21,7 +21,21 @@ interface StockInfo {
   date: string;
 }
 
-import { setCacheHeaders } from './_cache';
+function setCacheHeaders(res: any, opts: { duringMarket: number; afterMarket: number }) {
+  const now = new Date();
+  const twHour = (now.getUTCHours() + 8) % 24;
+  const twMin = twHour * 60 + now.getUTCMinutes();
+  const day = now.getUTCDay();
+  const twDay = (now.getUTCHours() + 8 >= 24) ? (day + 1) % 7 : day;
+  const isWeekday = twDay >= 1 && twDay <= 5;
+  const isMarketHours = twMin >= 540 && twMin <= 810;
+  const maxAge = (isWeekday && isMarketHours) ? opts.duringMarket : opts.afterMarket;
+  if (maxAge > 0) {
+    res.setHeader('Cache-Control', `public, s-maxage=${maxAge}, stale-while-revalidate=${maxAge * 2}`);
+  } else {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  }
+}
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');

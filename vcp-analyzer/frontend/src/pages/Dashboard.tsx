@@ -79,8 +79,9 @@ export default function Dashboard() {
       setTotalScanned(result.scanned);
       setLatestDate(result.latestDate ?? '');
     } catch (e: unknown) {
-      setError('掃描失敗：無法連線到後端伺服器，請確認後端是否已啟動');
-      console.error(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(`掃描失敗：${msg}`);
+      console.error('[scan error]', e);
     } finally {
       setLoading(false);
     }
