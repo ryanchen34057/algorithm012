@@ -231,6 +231,7 @@ export default function BullPickRow({ stock }: Props) {
                 tooltip={getT2Tooltip(stock.target2Label)} />
               <Row label="風報比" value={stock.rewardRisk > 0 ? `1:${stock.rewardRisk}` : '-'}
                 color={stock.rewardRisk >= 3 ? c.up : c.blue} c={c} />
+              <TargetExplainer stock={stock} c={c} />
             </DetailSection>
           </div>
 
@@ -405,4 +406,62 @@ function getT2Tooltip(label: string): string {
   if (label === '3×ATR')
     return 'T2（積極目標）= 現價 + 3 × ATR(20)\n中期較積極的獲利目標。';
   return 'T2 = 第二目標價（積極）';
+}
+
+function TargetExplainer({ stock, c }: { stock: BullPickAnalysis; c: ThemeColors }) {
+  const [open, setOpen] = useState(false);
+  const belowATH = stock.distHighPct > 0;
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          color: c.textDim, fontSize: 10, padding: 0, textAlign: 'left',
+        }}
+      >
+        {open ? '▲ 收合說明' : '▼ T1/T2 怎麼算的？'}
+      </button>
+      {open && (
+        <div style={{
+          marginTop: 6, padding: '8px 10px', borderRadius: 6,
+          background: c.bgInput, fontSize: 11, lineHeight: 1.7,
+          color: c.textSecondary, border: `1px solid ${c.border}`,
+        }}>
+          {belowATH ? (
+            <>
+              <div>目前股價還沒突破歷史最高價 <b style={{ color: c.yellow }}>{stock.allTimeHigh}</b>，所以：</div>
+              <div style={{ marginTop: 4 }}>
+                <b style={{ color: '#22c55e' }}>T1（保守目標）= 歷史最高價</b>
+                <br />前高就像天花板，股價漲到這裡常常會遇到賣壓，所以先設這裡為第一個目標。
+              </div>
+              <div style={{ marginTop: 4 }}>
+                <b style={{ color: '#16a34a' }}>T2（積極目標）= 歷史高點 + 波動空間</b>
+                <br />如果股價衝過天花板，代表買盤很強，可以再多看一段。這段距離用股價每天平均波動幅度（ATR）來估算。
+              </div>
+            </>
+          ) : (
+            <>
+              <div>股價已經創新高，沒有前面的天花板擋路了，所以用<b style={{ color: c.yellow }}>費波那契延伸</b>來估目標：</div>
+              <div style={{ marginTop: 4 }}>
+                先量出最近一段「從低點漲到高點」的距離（像尺一樣量出漲了多少）。
+              </div>
+              <div style={{ marginTop: 4 }}>
+                <b style={{ color: '#22c55e' }}>T1 = 再往上延伸 27.2%</b>（Fib 1.272）
+                <br />保守估計，漲幅再多 ¼ 左右。
+              </div>
+              <div style={{ marginTop: 4 }}>
+                <b style={{ color: '#16a34a' }}>T2 = 再往上延伸 61.8%</b>（Fib 1.618，黃金比例）
+                <br />如果趨勢很強，漲幅可以再多 ⅝ 左右。這個 0.618 是大自然和金融市場中常出現的神奇比例。
+              </div>
+            </>
+          )}
+          <div style={{ marginTop: 6, color: c.textDim, fontSize: 10 }}>
+            停損 = 近期支撐位（底部低點或均線）。風報比 = 預期獲利 ÷ 可能虧損，越大越好。
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
