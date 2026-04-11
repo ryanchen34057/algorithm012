@@ -205,9 +205,14 @@ async function fetchChart(symbol: string): Promise<{ candles: OHLCV[]; name: str
     const meta = (dailyData as any)?.chart?.result?.[0]?.meta;
     const name = meta?.shortName ?? meta?.symbol ?? symbol;
 
-    // Find true all-time high from monthly data (up to 20 years)
+    // Find true all-time high from multiple sources:
+    // 1. Monthly candle highs (up to 20 years)
+    // 2. meta.fiftyTwoWeekHigh (Yahoo server-side, unadjusted)
+    // 3. Daily candle highs (checked later in scanner.ts)
     let allTimeHigh = 0;
     let allTimeHighDate = '';
+
+    // Source 1: Monthly candles
     const monthlyCandles = parseYahooChart(monthlyData, symbol, '');
     if (monthlyCandles) {
       for (const c of monthlyCandles) {
@@ -216,6 +221,21 @@ async function fetchChart(symbol: string): Promise<{ candles: OHLCV[]; name: str
           allTimeHighDate = c.date;
         }
       }
+    }
+
+    // Source 2: meta.fiftyTwoWeekHigh (often more accurate than adjusted candle data)
+    const weekHigh52 = parseFloat(meta?.fiftyTwoWeekHigh ?? 0);
+    if (weekHigh52 > allTimeHigh) {
+      allTimeHigh = weekHigh52;
+      allTimeHighDate = ''; // Yahoo doesn't provide the date for 52wk high
+    }
+
+    // Source 3: monthly meta
+    const monthlyMeta = (monthlyData as any)?.chart?.result?.[0]?.meta;
+    const monthlyWeekHigh52 = parseFloat(monthlyMeta?.fiftyTwoWeekHigh ?? 0);
+    if (monthlyWeekHigh52 > allTimeHigh) {
+      allTimeHigh = monthlyWeekHigh52;
+      allTimeHighDate = '';
     }
 
     return { candles, name, allTimeHigh: allTimeHigh || undefined, allTimeHighDate: allTimeHighDate || undefined };
