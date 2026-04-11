@@ -2,7 +2,7 @@
 // then runs analysis in the browser.
 
 import { BullPickAnalysis, BullPickScanResult, MarketStatus, StockChartData, OHLCV, IndustrySector, IndustryFlowData, IndustryStockEntry } from '../types';
-import { analyze, parseYahooChart, BullPickParams, InstitutionEntry, RevenueEntry } from './scanner';
+import { analyze, parseYahooChart, BullPickParams, InstitutionEntry, RevenueEntry, rescoreWithRevenue } from './scanner';
 import { INDUSTRY_MAP } from '../data/industryMap';
 
 // ── Stock code → industry classification (fallback when API unavailable) ──
@@ -427,13 +427,13 @@ export async function scanBullPick(
         s.revenuePrev = r2(rev.revenuePrev / 1e8);
         s.revenueGrowth = r2(rev.revenueGrowth);
         s.revenuePeriod = rev.period;
+        // Re-calculate score with actual revenue data
+        rescoreWithRevenue(s);
       }
     }
   }
 
-  // Re-score with revenue data
-  // (Revenue contributes up to 20 pts; we already have partial scores without it)
-  // For simplicity, we just re-sort
+  // Re-sort after revenue re-scoring
   results.sort((a, b) => b.score - a.score);
 
   console.log(`[scanner] latest candle date: ${latestDate}, matched: ${results.length}/${total}`);

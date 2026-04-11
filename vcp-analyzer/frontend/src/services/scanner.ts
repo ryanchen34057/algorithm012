@@ -359,6 +359,18 @@ function findSecondLow(candles: OHLCV[], start: number, end: number, firstLowIdx
 
 // ── Scoring ──
 
+// Re-score a stock after revenue data is fetched
+export function rescoreWithRevenue(stock: BullPickAnalysis): void {
+  const { score, breakdown } = calcBullPickScore(
+    stock.pattern, stock.maAligned, stock.distHighPct, 999,
+    stock.totalNetBuy, stock.foreignNetBuy, stock.trustNetBuy,
+    stock.revenueGrowth,
+    stock.currentPrice, stock.ma20, stock.ma60,
+  );
+  stock.score = score;
+  stock.scoreBreakdown = breakdown;
+}
+
 function calcBullPickScore(
   pattern: PatternShapeType, maAligned: boolean, distHighPct: number, distHighMax: number,
   totalNetBuy: number, foreignNetBuy: number, trustNetBuy: number,
