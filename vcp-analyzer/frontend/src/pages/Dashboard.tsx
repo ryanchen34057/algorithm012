@@ -46,6 +46,7 @@ export default function Dashboard() {
   const [totalScanned, setTotalScanned] = useState(0);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [latestDate, setLatestDate] = useState('');
+  const [sortBy, setSortBy] = useState<'score' | 'rr'>('score');
 
   // Auto-load industry flow on mount (no scan needed)
   useEffect(() => {
@@ -92,6 +93,10 @@ export default function Dashboard() {
   const handleReset = () => setFilter({ ...BULL_PICK_DEFAULTS });
 
   const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+
+  const sortedStocks = [...stocks].sort((a, b) =>
+    sortBy === 'rr' ? b.rewardRisk - a.rewardRisk : b.score - a.score,
+  );
 
   return (
     <div style={{
@@ -276,7 +281,18 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              {stocks.length > 0 && (
+                <div style={{ display: 'flex', gap: 0, borderRadius: 6, overflow: 'hidden', border: `1px solid ${c.border}` }}>
+                  {([['score', '分數'], ['rr', '風報比']] as const).map(([key, label]) => (
+                    <button key={key} onClick={() => setSortBy(key)} style={{
+                      padding: '4px 14px', fontSize: 11, fontWeight: 700, border: 'none', cursor: 'pointer',
+                      background: sortBy === key ? c.accent : 'transparent',
+                      color: sortBy === key ? '#141118' : c.textMuted,
+                    }}>{label}</button>
+                  ))}
+                </div>
+              )}
               <span style={{ fontSize: 11, color: c.textMuted }}>
                 {new Date(scannedAt).toLocaleString('zh-TW')}
                 {latestDate && ` · 資料 ${latestDate}`}
@@ -295,7 +311,7 @@ export default function Dashboard() {
 
       {/* Stock cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {stocks.map((s) => <BullPickRow key={s.symbol} stock={s} />)}
+        {sortedStocks.map((s) => <BullPickRow key={s.symbol} stock={s} />)}
       </div>
 
       <EmptyState loading={loading} hasResults={stocks.length > 0} scannedAt={scannedAt} />

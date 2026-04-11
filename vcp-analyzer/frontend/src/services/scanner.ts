@@ -134,48 +134,68 @@ export function analyze(
 
   let target: number;
   let targetLabel: string;
+  let targetFormula: string;
   let target2: number;
   let target2Label: string;
+  let target2Formula: string;
 
   if (mm) {
-    const mmT1 = r2(mm.pullbackLow + mm.firstLeg);
-    const mmT2 = r2(mm.pullbackLow + mm.firstLeg * 1.5);
+    const pl = r2(mm.pullbackLow);
+    const fl = r2(mm.firstLeg);
+    const rh = r2(mm.rallyHigh);
+    const sl = r2(mm.swingLow);
+    const mmT1 = r2(pl + mm.firstLeg);
+    const mmT2 = r2(pl + mm.firstLeg * 1.5);
+    const mmFormula = `回調低 ${pl} + 漲幅 ${fl}（${rh} - ${sl}）`;
 
     if (distHighPct > 0 && allTimeHigh < mmT1) {
       // Below ATH and ATH is below measured move → ATH is first resistance
       target = r2(allTimeHigh);
       targetLabel = '歷史高點';
+      targetFormula = `前高 ${r2(allTimeHigh)}`;
       target2 = mmT1;
       target2Label = '等幅測量';
+      target2Formula = `${mmFormula} = ${mmT1}`;
     } else {
       target = mmT1;
       targetLabel = '等幅測量';
+      targetFormula = `${mmFormula} = ${mmT1}`;
       target2 = mmT2;
       target2Label = '1.5倍等幅';
+      target2Formula = `${pl} + ${fl} × 1.5 = ${mmT2}`;
     }
   } else {
     // Fallback: no clear swing structure → use ATR
+    const atrR = r2(atr20);
     if (distHighPct > 0) {
       target = r2(allTimeHigh);
       targetLabel = '歷史高點';
+      targetFormula = `前高 ${r2(allTimeHigh)}`;
       target2 = r2(allTimeHigh + 1.5 * atr20);
       target2Label = 'ATH+1.5×ATR';
+      target2Formula = `${r2(allTimeHigh)} + ${atrR} × 1.5 = ${target2}`;
     } else {
       target = r2(price + 2 * atr20);
       targetLabel = '2×ATR';
+      targetFormula = `${r2(price)} + ${atrR} × 2 = ${target}`;
       target2 = r2(price + 3 * atr20);
       target2Label = '3×ATR';
+      target2Formula = `${r2(price)} + ${atrR} × 3 = ${target2}`;
     }
   }
 
   // Sanity check: targets must be above entry
   if (target <= price) {
+    const atrR = r2(atr20);
     target = r2(price + 2 * atr20);
     targetLabel = '2×ATR';
+    targetFormula = `${r2(price)} + ${atrR} × 2 = ${target}`;
   }
   if (target2 <= target) {
+    const atrR = r2(atr20);
     target2 = r2(price + 3 * atr20);
     target2Label = '3×ATR';
+    target2Formula = `${r2(price)} + ${atrR} × 3 = ${target2}`;
   }
 
   // 林則行 20% rule: upside to T1
@@ -217,8 +237,10 @@ export function analyze(
     stopLabel,
     target,
     targetLabel,
+    targetFormula,
     target2,
     target2Label,
+    target2Formula,
     rewardRisk: rr,
     upsidePct,
     adv20: r2(adv20),

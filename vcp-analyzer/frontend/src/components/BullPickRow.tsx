@@ -227,8 +227,18 @@ export default function BullPickRow({ stock }: Props) {
               <Row label="停損" value={`${stock.stopLoss}`} color="#ef4444" c={c} sub={stock.stopLabel} />
               <Row label="T1" value={`${stock.target}`} color="#22c55e" c={c} sub={stock.targetLabel}
                 tooltip={getT1Tooltip(stock.targetLabel)} />
+              {stock.targetFormula && (
+                <div style={{ fontSize: 10, color: c.textDim, marginTop: -2, marginBottom: 2, paddingLeft: 2 }}>
+                  {stock.targetFormula}
+                </div>
+              )}
               <Row label="T2" value={`${stock.target2}`} color="#16a34a" c={c} sub={stock.target2Label}
                 tooltip={getT2Tooltip(stock.target2Label)} />
+              {stock.target2Formula && (
+                <div style={{ fontSize: 10, color: c.textDim, marginTop: -2, marginBottom: 2, paddingLeft: 2 }}>
+                  {stock.target2Formula}
+                </div>
+              )}
               <Row label="T1預估漲幅" value={`${stock.upsidePct > 0 ? '+' : ''}${stock.upsidePct}%`}
                 color={stock.upsidePct >= 20 ? c.up : stock.upsidePct >= 10 ? c.yellow : c.textMuted} c={c}
                 bold={stock.upsidePct >= 20}

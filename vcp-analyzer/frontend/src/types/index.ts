@@ -344,8 +344,10 @@ export interface BullPickAnalysis {
   stopLabel: string;
   target: number;
   targetLabel: string;
+  targetFormula: string;     // e.g. "75 + 30 = 105"
   target2: number;
   target2Label: string;
+  target2Formula: string;
   rewardRisk: number;
   upsidePct: number;         // T1 預估漲幅 (%)
   adv20: number;
