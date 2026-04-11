@@ -278,6 +278,7 @@ export interface BullPickScanParams {
   distHighMax?: number;
   minScore?: number;
   requireVolShrink?: boolean;
+  excludeFinancial?: boolean;
 }
 
 export async function scanBullPick(
@@ -335,14 +336,22 @@ export async function scanBullPick(
   const industries = flowData.sectors;
   console.log(`[scanner] ${industries.length} industry sectors computed`);
 
+  // Filter out financial stocks before chart fetch (saves API calls)
+  let scanStocks = stocks;
+  if (params.excludeFinancial) {
+    scanStocks = stocks.filter(s => classifyBySymbol(s.symbol) !== '金融保險業');
+    console.log(`[scanner] excluded financial: ${stocks.length - scanStocks.length} stocks removed, ${scanStocks.length} remaining`);
+  }
+  const scanTotal = scanStocks.length;
+
   // Step 2: Fetch charts in batches and analyze
   const BATCH_SIZE = 8;
   const results: BullPickAnalysis[] = [];
   let done = 0;
   let latestDate = '';
 
-  for (let i = 0; i < stocks.length; i += BATCH_SIZE) {
-    const batch = stocks.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < scanStocks.length; i += BATCH_SIZE) {
+    const batch = scanStocks.slice(i, i + BATCH_SIZE);
     const chartPromises = batch.map((s) => fetchChart(s.symbol));
     const charts = await Promise.all(chartPromises);
 
@@ -405,7 +414,7 @@ export async function scanBullPick(
       done++;
     }
 
-    onProgress?.(done, total);
+    onProgress?.(done, scanTotal);
   }
 
   // Step 3: Fetch revenue for matched stocks (top candidates only, to save time)
@@ -438,7 +447,7 @@ export async function scanBullPick(
   // Re-sort after revenue re-scoring
   results.sort((a, b) => b.score - a.score);
 
-  console.log(`[scanner] latest candle date: ${latestDate}, matched: ${results.length}/${total}`);
+  console.log(`[scanner] latest candle date: ${latestDate}, matched: ${results.length}/${scanTotal}`);
 
   return {
     stocks: results,
@@ -447,7 +456,7 @@ export async function scanBullPick(
     stocksByIndustry: flowData.stocksByIndustry,
     scannedAt: new Date().toISOString(),
     total: results.length,
-    scanned: total,
+    scanned: scanTotal,
     latestDate,
   };
 }

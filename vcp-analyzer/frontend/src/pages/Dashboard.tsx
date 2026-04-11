@@ -16,11 +16,12 @@ interface BullPickFilter {
   distHighMax: number;
   minScore: number;
   requireVolShrink: boolean;
+  excludeFinancial: boolean;
 }
 
 const BULL_PICK_DEFAULTS: BullPickFilter = {
   minPrice: 15, maxPrice: 9999, minVolume: 300,
-  distHighMax: 10, minScore: 40, requireVolShrink: false,
+  distHighMax: 10, minScore: 40, requireVolShrink: false, excludeFinancial: true,
 };
 
 const RANK_TIERS = [
@@ -68,6 +69,7 @@ export default function Dashboard() {
           minPrice: filter.minPrice, maxPrice: filter.maxPrice,
           minVolume: filter.minVolume, distHighMax: filter.distHighMax,
           minScore: filter.minScore, requireVolShrink: filter.requireVolShrink,
+          excludeFinancial: filter.excludeFinancial,
         },
         (done, total) => setProgress({ done, total }),
       );
@@ -154,6 +156,20 @@ export default function Dashboard() {
                 5日量縮
               </label>
               <span style={{ color: c.textDim, fontSize: 10 }}>近5日均量 &lt; 20日均量</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'flex-end' }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                fontSize: 12, color: filter.excludeFinancial ? c.accent : c.textSecondary,
+                fontWeight: filter.excludeFinancial ? 700 : 400,
+                userSelect: 'none',
+              }}>
+                <input type="checkbox" checked={filter.excludeFinancial}
+                  onChange={(e) => setFilter((f) => ({ ...f, excludeFinancial: e.target.checked }))}
+                  style={{ accentColor: c.accent, width: 14, height: 14, cursor: 'pointer' }} />
+                排除金融股
+              </label>
+              <span style={{ color: c.textDim, fontSize: 10 }}>金融保險業</span>
             </div>
           </FilterGroup>
         </div>
