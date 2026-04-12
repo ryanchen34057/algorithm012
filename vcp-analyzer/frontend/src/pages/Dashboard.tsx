@@ -182,28 +182,28 @@ export default function Dashboard() {
                   style={{ accentColor: c.accent, width: 14, height: 14, cursor: 'pointer' }} />
                 波動收斂
               </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: c.textDim }}>
-                近
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: c.textDim, flexWrap: 'wrap' }}>
+                <span>近</span>
                 <input type="number" value={filter.volContractDays} min={5} max={60}
                   onChange={(e) => setFilter((f) => ({ ...f, volContractDays: Number(e.target.value) }))}
                   disabled={!filter.requireVolContract}
                   style={{
                     background: c.bgInput, border: `1px solid ${c.border}`, borderRadius: 4,
-                    color: c.text, fontSize: 11, fontWeight: 700, padding: '2px 4px',
-                    outline: 'none', width: 34, textAlign: 'center',
+                    color: c.text, fontSize: 13, fontWeight: 700, padding: '4px 6px',
+                    outline: 'none', width: 56, textAlign: 'center',
                     opacity: filter.requireVolContract ? 1 : 0.5,
                   }} />
-                日高低差 ≤
+                <span>日 ≤</span>
                 <input type="number" value={filter.volContractPct} min={3} max={50} step={1}
                   onChange={(e) => setFilter((f) => ({ ...f, volContractPct: Number(e.target.value) }))}
                   disabled={!filter.requireVolContract}
                   style={{
                     background: c.bgInput, border: `1px solid ${c.border}`, borderRadius: 4,
-                    color: c.text, fontSize: 11, fontWeight: 700, padding: '2px 4px',
-                    outline: 'none', width: 34, textAlign: 'center',
+                    color: c.text, fontSize: 13, fontWeight: 700, padding: '4px 6px',
+                    outline: 'none', width: 56, textAlign: 'center',
                     opacity: filter.requireVolContract ? 1 : 0.5,
                   }} />
-                %
+                <span>%</span>
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'flex-end' }}>
