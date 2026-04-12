@@ -31,7 +31,9 @@ export interface BullPickParams {
   distHighMax: number;
   minScore: number;
   requireVolShrink: boolean;  // 是否要求5日內有量縮
-  requireVolContract: boolean; // 是否要求近15日波動收斂10%內
+  requireVolContract: boolean; // 是否要求近期波動收斂
+  volContractPct: number;      // 波動收斂門檻 % (e.g. 10 = 10%)
+  volContractDays: number;     // 波動收斂觀察天數 (e.g. 15)
 }
 
 // ── Main Analyze Function ──
@@ -65,19 +67,22 @@ export function analyze(
   // Hard filter: require volume contraction (5日均量 < 20日均量)
   if (params.requireVolShrink && volShrinkPct <= 0) return null;
 
-  // Price range contraction (VCP core): (highest high - lowest low) / lowest low
-  // over the last 15 trading days should be tight (≤ 10%)
-  const rangeWindow = Math.min(15, n);
+  // Price range contraction (VCP core): use close prices over the last N trading
+  // days — closes reflect how the chart "looks" far better than high/low which
+  // includes intraday wicks. Range = (max close - min close) / min close.
+  const rangeWindow = Math.min(params.volContractDays || 15, n);
   let rangeHigh = 0;
   let rangeLow = Number.MAX_VALUE;
   for (let i = n - rangeWindow; i < n; i++) {
-    if (candles[i].high > rangeHigh) rangeHigh = candles[i].high;
-    if (candles[i].low < rangeLow) rangeLow = candles[i].low;
+    const c = candles[i].close;
+    if (c > rangeHigh) rangeHigh = c;
+    if (c < rangeLow) rangeLow = c;
   }
   const priceRangePct = rangeLow > 0 ? r2(((rangeHigh - rangeLow) / rangeLow) * 100) : 0;
 
-  // Hard filter: require tight price range (波動收斂10%內)
-  if (params.requireVolContract && priceRangePct > 10) return null;
+  // Hard filter: require tight price range
+  const contractThreshold = params.volContractPct || 10;
+  if (params.requireVolContract && priceRangePct > contractThreshold) return null;
 
   // MAs
   const closes = candles.map((c) => c.close);

@@ -299,6 +299,8 @@ export interface BullPickScanParams {
   minScore?: number;
   requireVolShrink?: boolean;
   requireVolContract?: boolean;
+  volContractPct?: number;
+  volContractDays?: number;
   excludeFinancial?: boolean;
 }
 
@@ -314,6 +316,8 @@ export async function scanBullPick(
     minScore: params.minScore ?? 40,
     requireVolShrink: params.requireVolShrink ?? false,
     requireVolContract: params.requireVolContract ?? false,
+    volContractPct: params.volContractPct ?? 15,
+    volContractDays: params.volContractDays ?? 15,
   };
 
   // Step 1: Fetch stock list + institution data + market status in parallel

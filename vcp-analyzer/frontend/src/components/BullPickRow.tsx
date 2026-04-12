@@ -221,10 +221,10 @@ export default function BullPickRow({ stock }: Props) {
               <Row label="5日量縮" value={stock.volShrinkPct > 0 ? `${stock.volShrinkPct}%` : '無量縮'}
                 color={stock.volShrinkPct >= 30 ? c.up : stock.volShrinkPct > 0 ? c.yellow : c.textMuted} c={c}
                 bold={stock.volShrinkPct >= 30} />
-              <Row label="15日波動" value={`${stock.priceRangePct}%`}
+              <Row label="近期波動" value={`${stock.priceRangePct}%`}
                 color={stock.priceRangePct <= 10 ? c.up : stock.priceRangePct <= 15 ? c.yellow : c.textMuted} c={c}
                 bold={stock.priceRangePct <= 10}
-                tooltip="近15日（最高-最低）/最低。VCP 波動收斂：≤10% 為佳" />
+                tooltip="近期收盤價高低差 / 低點。VCP 波動收斂：越小越緊" />
             </DetailSection>
 
             <DetailSection title="交易計畫">

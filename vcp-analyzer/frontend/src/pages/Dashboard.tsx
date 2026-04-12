@@ -17,13 +17,16 @@ interface BullPickFilter {
   minScore: number;
   requireVolShrink: boolean;
   requireVolContract: boolean;
+  volContractPct: number;
+  volContractDays: number;
   excludeFinancial: boolean;
 }
 
 const BULL_PICK_DEFAULTS: BullPickFilter = {
   minPrice: 15, maxPrice: 9999, minVolume: 300,
   distHighMax: 10, minScore: 40, requireVolShrink: false,
-  requireVolContract: false, excludeFinancial: true,
+  requireVolContract: false, volContractPct: 15, volContractDays: 15,
+  excludeFinancial: true,
 };
 
 const RANK_TIERS = [
@@ -73,6 +76,8 @@ export default function Dashboard() {
           minVolume: filter.minVolume, distHighMax: filter.distHighMax,
           minScore: filter.minScore, requireVolShrink: filter.requireVolShrink,
           requireVolContract: filter.requireVolContract,
+          volContractPct: filter.volContractPct,
+          volContractDays: filter.volContractDays,
           excludeFinancial: filter.excludeFinancial,
         },
         (done, total) => setProgress({ done, total }),
@@ -165,7 +170,7 @@ export default function Dashboard() {
               </label>
               <span style={{ color: c.textDim, fontSize: 10 }}>近5日均量 &lt; 20日均量</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'flex-end' }}>
               <label style={{
                 display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
                 fontSize: 12, color: filter.requireVolContract ? c.accent : c.textSecondary,
@@ -177,7 +182,29 @@ export default function Dashboard() {
                   style={{ accentColor: c.accent, width: 14, height: 14, cursor: 'pointer' }} />
                 波動收斂
               </label>
-              <span style={{ color: c.textDim, fontSize: 10 }}>近15日高低差 ≤ 10%</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: c.textDim }}>
+                近
+                <input type="number" value={filter.volContractDays} min={5} max={60}
+                  onChange={(e) => setFilter((f) => ({ ...f, volContractDays: Number(e.target.value) }))}
+                  disabled={!filter.requireVolContract}
+                  style={{
+                    background: c.bgInput, border: `1px solid ${c.border}`, borderRadius: 4,
+                    color: c.text, fontSize: 11, fontWeight: 700, padding: '2px 4px',
+                    outline: 'none', width: 34, textAlign: 'center',
+                    opacity: filter.requireVolContract ? 1 : 0.5,
+                  }} />
+                日高低差 ≤
+                <input type="number" value={filter.volContractPct} min={3} max={50} step={1}
+                  onChange={(e) => setFilter((f) => ({ ...f, volContractPct: Number(e.target.value) }))}
+                  disabled={!filter.requireVolContract}
+                  style={{
+                    background: c.bgInput, border: `1px solid ${c.border}`, borderRadius: 4,
+                    color: c.text, fontSize: 11, fontWeight: 700, padding: '2px 4px',
+                    outline: 'none', width: 34, textAlign: 'center',
+                    opacity: filter.requireVolContract ? 1 : 0.5,
+                  }} />
+                %
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'flex-end' }}>
               <label style={{
