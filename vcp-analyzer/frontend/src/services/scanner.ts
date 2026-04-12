@@ -168,7 +168,9 @@ export function analyze(
     const mmT2 = r2(pl + mm.firstLeg * 1.5);
     const mmFormula = `回調低 ${pl} + 漲幅 ${fl}（${rh} - ${sl}）`;
 
-    if (distHighPct > 0 && allTimeHigh < mmT1) {
+    // Only use ATH as T1 if price is MEANINGFULLY below it (> 3%).
+    // For stocks at/near ATH, ATH ≈ current price → 0% upside, useless.
+    if (distHighPct > 3 && allTimeHigh < mmT1) {
       // Below ATH and ATH is below measured move → ATH is first resistance
       target = r2(allTimeHigh);
       targetLabel = '歷史高點';
@@ -187,7 +189,7 @@ export function analyze(
   } else {
     // Fallback: no clear swing structure → use ATR
     const atrR = r2(atr20);
-    if (distHighPct > 0) {
+    if (distHighPct > 3) {
       target = r2(allTimeHigh);
       targetLabel = '歷史高點';
       targetFormula = `前高 ${r2(allTimeHigh)}`;
@@ -204,14 +206,15 @@ export function analyze(
     }
   }
 
-  // Sanity check: targets must be above entry
-  if (target <= price) {
+  // Sanity check: targets must provide meaningful upside (≥ 3% for T1, ≥ 2%
+  // additional for T2). Prevents T1 ≈ entry when stock is already at ATH.
+  if (target <= price * 1.03) {
     const atrR = r2(atr20);
     target = r2(price + 2 * atr20);
     targetLabel = '2×ATR';
     targetFormula = `${r2(price)} + ${atrR} × 2 = ${target}`;
   }
-  if (target2 <= target) {
+  if (target2 <= target * 1.02) {
     const atrR = r2(atr20);
     target2 = r2(price + 3 * atr20);
     target2Label = '3×ATR';
