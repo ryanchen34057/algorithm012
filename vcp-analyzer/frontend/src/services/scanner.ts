@@ -31,6 +31,7 @@ export interface BullPickParams {
   distHighMax: number;
   minScore: number;
   requireVolShrink: boolean;  // 是否要求5日內有量縮
+  requireVolContract: boolean; // 是否要求近15日波動收斂10%內
 }
 
 // ── Main Analyze Function ──
@@ -63,6 +64,20 @@ export function analyze(
 
   // Hard filter: require volume contraction (5日均量 < 20日均量)
   if (params.requireVolShrink && volShrinkPct <= 0) return null;
+
+  // Price range contraction (VCP core): (highest high - lowest low) / lowest low
+  // over the last 15 trading days should be tight (≤ 10%)
+  const rangeWindow = Math.min(15, n);
+  let rangeHigh = 0;
+  let rangeLow = Number.MAX_VALUE;
+  for (let i = n - rangeWindow; i < n; i++) {
+    if (candles[i].high > rangeHigh) rangeHigh = candles[i].high;
+    if (candles[i].low < rangeLow) rangeLow = candles[i].low;
+  }
+  const priceRangePct = rangeLow > 0 ? r2(((rangeHigh - rangeLow) / rangeLow) * 100) : 0;
+
+  // Hard filter: require tight price range (波動收斂10%內)
+  if (params.requireVolContract && priceRangePct > 10) return null;
 
   // MAs
   const closes = candles.map((c) => c.close);
@@ -246,6 +261,7 @@ export function analyze(
     adv20: r2(adv20),
     todayVolume: today.volume,
     volShrinkPct,
+    priceRangePct,
     score,
     scoreBreakdown,
   };

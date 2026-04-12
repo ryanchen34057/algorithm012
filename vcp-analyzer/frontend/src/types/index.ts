@@ -353,6 +353,7 @@ export interface BullPickAnalysis {
   adv20: number;
   todayVolume: number;
   volShrinkPct: number;    // 5日量縮幅度 (%)
+  priceRangePct: number;   // 近15日價格波動幅度 (%) — VCP 波動收斂
   score: number;
   scoreBreakdown: ScoreBreakdown;
 }

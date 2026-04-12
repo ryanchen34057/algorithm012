@@ -16,12 +16,14 @@ interface BullPickFilter {
   distHighMax: number;
   minScore: number;
   requireVolShrink: boolean;
+  requireVolContract: boolean;
   excludeFinancial: boolean;
 }
 
 const BULL_PICK_DEFAULTS: BullPickFilter = {
   minPrice: 15, maxPrice: 9999, minVolume: 300,
-  distHighMax: 10, minScore: 40, requireVolShrink: false, excludeFinancial: true,
+  distHighMax: 10, minScore: 40, requireVolShrink: false,
+  requireVolContract: false, excludeFinancial: true,
 };
 
 const RANK_TIERS = [
@@ -70,6 +72,7 @@ export default function Dashboard() {
           minPrice: filter.minPrice, maxPrice: filter.maxPrice,
           minVolume: filter.minVolume, distHighMax: filter.distHighMax,
           minScore: filter.minScore, requireVolShrink: filter.requireVolShrink,
+          requireVolContract: filter.requireVolContract,
           excludeFinancial: filter.excludeFinancial,
         },
         (done, total) => setProgress({ done, total }),
@@ -161,6 +164,20 @@ export default function Dashboard() {
                 5日量縮
               </label>
               <span style={{ color: c.textDim, fontSize: 10 }}>近5日均量 &lt; 20日均量</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'flex-end' }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                fontSize: 12, color: filter.requireVolContract ? c.accent : c.textSecondary,
+                fontWeight: filter.requireVolContract ? 700 : 400,
+                userSelect: 'none',
+              }}>
+                <input type="checkbox" checked={filter.requireVolContract}
+                  onChange={(e) => setFilter((f) => ({ ...f, requireVolContract: e.target.checked }))}
+                  style={{ accentColor: c.accent, width: 14, height: 14, cursor: 'pointer' }} />
+                波動收斂
+              </label>
+              <span style={{ color: c.textDim, fontSize: 10 }}>近15日高低差 ≤ 10%</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'flex-end' }}>
               <label style={{
