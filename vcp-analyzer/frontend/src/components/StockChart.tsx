@@ -98,6 +98,29 @@ export default function StockChart({ chart, gap, priceLines: customLines }: Prop
       }))
     );
 
+    // ── Volume 20-period MA (on the same volume scale) ─────────────────
+    const volMaPeriod = 20;
+    const volMaSeries = lc.addSeries(LineSeries, {
+      color: '#f59e0b',
+      lineWidth: 2,
+      priceScaleId: 'volume',
+      title: `${volMaPeriod}MA量`,
+      crosshairMarkerVisible: false,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
+    const volMaData: { time: Time; value: number }[] = [];
+    for (let i = 0; i < chart.candles.length; i++) {
+      if (i < volMaPeriod - 1) continue;
+      let sum = 0;
+      for (let j = i - volMaPeriod + 1; j <= i; j++) sum += chart.candles[j].volume;
+      volMaData.push({
+        time: chart.candles[i].date as Time,
+        value: sum / volMaPeriod,
+      });
+    }
+    volMaSeries.setData(volMaData);
+
     // ── Moving averages (dynamic per interval) ───────────────────────────
     const maLines = chart.maLines ?? [
       { data: chart.ma20, color: '#22d3ee', label: 'MA20' },
