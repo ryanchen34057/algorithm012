@@ -303,6 +303,12 @@ function detectShape(candles: OHLCV[], n: number): [PatternShapeType, string] {
   const vResult = detectVBottom(candles, start, n);
   if (vResult) return vResult;
 
+  // Consolidation — check BEFORE cup/U/N because tight-range stocks often
+  // accidentally match the loose "low + recovery" criteria of U/N shapes.
+  // Consolidation is a more specific signature (flat, no real drop).
+  const cbResult = detectConsolidation(candles, start, n);
+  if (cbResult) return cbResult;
+
   // Find lowest point for other patterns
   let lowestIdx = start;
   for (let i = start; i < n; i++) {
@@ -342,10 +348,6 @@ function detectShape(candles: OHLCV[], n: number): [PatternShapeType, string] {
   if (secondLow && lowDepth > 5) {
     return ['n_shape', 'N型整理'];
   }
-
-  // Consolidation bottom (least specific — long tight range)
-  const cbResult = detectConsolidation(candles, start, n);
-  if (cbResult) return cbResult;
 
   return ['none', ''];
 }
@@ -499,10 +501,12 @@ function detectVBottom(candles: OHLCV[], start: number, end: number): [PatternSh
 }
 
 // ── Consolidation Bottom (盤整底) ──
-// Long tight range (≥ 30 days, close-to-close range ≤ 10%).
+// Long tight range where the stock has moved sideways for 25+ days
+// within a ≤ 15% close-to-close range, and the current price is in
+// the upper half of the range (near/just past breakout).
 function detectConsolidation(candles: OHLCV[], start: number, end: number): [PatternShapeType, string] | null {
-  const minDays = 30;
-  const windowStart = Math.max(start, end - 40);
+  const minDays = 25;
+  const windowStart = Math.max(start, end - 50);
   const days = end - windowStart;
   if (days < minDays) return null;
 
@@ -512,10 +516,17 @@ function detectConsolidation(candles: OHLCV[], start: number, end: number): [Pat
     if (cl > hi) hi = cl;
     if (cl < lo) lo = cl;
   }
-  if (lo <= 0) return null;
+  if (lo <= 0 || hi <= lo) return null;
 
+  // Tight range (close-to-close ≤ 15%)
   const rangePct = (hi - lo) / lo * 100;
-  if (rangePct > 10) return null;
+  if (rangePct > 15) return null;
+
+  // Must be near the top of the range (at least 50% up, signalling
+  // imminent or recent breakout — the 進場時機 for this pattern)
+  const price = candles[end - 1].close;
+  const posInRange = (price - lo) / (hi - lo);
+  if (posInRange < 0.5) return null;
 
   return ['consolidation', '盤整底'];
 }
