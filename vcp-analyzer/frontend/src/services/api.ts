@@ -1,7 +1,7 @@
 // Frontend-only API: fetches data via Vercel serverless proxies,
 // then runs analysis in the browser.
 
-import { BullPickAnalysis, BullPickScanResult, MarketStatus, StockChartData, OHLCV, IndustrySector, IndustryFlowData, IndustryStockEntry } from '../types';
+import { BullPickAnalysis, BullPickScanResult, MarketStatus, StockChartData, OHLCV, IndustrySector, IndustryFlowData, IndustryStockEntry, PatternShapeType } from '../types';
 import { analyze, parseYahooChart, BullPickParams, InstitutionEntry, RevenueEntry, rescoreWithRevenue } from './scanner';
 import { INDUSTRY_MAP } from '../data/industryMap';
 
@@ -302,6 +302,7 @@ export interface BullPickScanParams {
   volContractPct?: number;
   volContractDays?: number;
   excludeFinancial?: boolean;
+  allowedPatterns?: PatternShapeType[];
 }
 
 export async function scanBullPick(
@@ -318,6 +319,7 @@ export async function scanBullPick(
     requireVolContract: params.requireVolContract ?? false,
     volContractPct: params.volContractPct ?? 15,
     volContractDays: params.volContractDays ?? 15,
+    allowedPatterns: params.allowedPatterns ?? [],
   };
 
   // Step 1: Fetch stock list + institution data + market status in parallel

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { scanBullPick, fetchIndustryFlow } from '../services/api';
-import { BullPickAnalysis, MarketStatus, IndustrySector, IndustryStockEntry } from '../types';
+import { BullPickAnalysis, MarketStatus, IndustrySector, IndustryStockEntry, PatternShapeType } from '../types';
 import { useColors } from '../components/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
 import BullPickRow from '../components/BullPickRow';
@@ -20,14 +20,26 @@ interface BullPickFilter {
   volContractPct: number;
   volContractDays: number;
   excludeFinancial: boolean;
+  allowedPatterns: PatternShapeType[];
 }
 
 const BULL_PICK_DEFAULTS: BullPickFilter = {
   minPrice: 15, maxPrice: 9999, minVolume: 300,
   distHighMax: 10, minScore: 40, requireVolShrink: false,
   requireVolContract: false, volContractPct: 15, volContractDays: 15,
-  excludeFinancial: true,
+  excludeFinancial: true, allowedPatterns: [],
 };
+
+const PATTERN_OPTIONS: { key: PatternShapeType; label: string; color: string }[] = [
+  { key: 'w_bottom',              label: 'W底',    color: '#22c55e' },
+  { key: 'triple_bottom',         label: '三重底', color: '#16a34a' },
+  { key: 'head_shoulders_bottom', label: '頭肩底', color: '#a78bfa' },
+  { key: 'v_bottom',              label: 'V形底', color: '#f59e0b' },
+  { key: 'cup',                   label: '圓形底', color: '#e5a100' },
+  { key: 'u_shape',               label: 'U型',    color: '#22d3ee' },
+  { key: 'n_shape',               label: 'N型',    color: '#6889ff' },
+  { key: 'consolidation',         label: '盤整底', color: '#8b6cc1' },
+];
 
 const RANK_TIERS = [
   { label: 'SSS', min: 90, max: 101, color: '#e5a100' },
@@ -79,6 +91,7 @@ export default function Dashboard() {
           volContractPct: filter.volContractPct,
           volContractDays: filter.volContractDays,
           excludeFinancial: filter.excludeFinancial,
+          allowedPatterns: filter.allowedPatterns,
         },
         (done, total) => setProgress({ done, total }),
       );
@@ -221,6 +234,52 @@ export default function Dashboard() {
               <span style={{ color: c.textDim, fontSize: 10 }}>金融保險業</span>
             </div>
           </FilterGroup>
+        </div>
+
+        {/* Pattern filter */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              線型篩選
+            </span>
+            <span style={{ fontSize: 10, color: c.textDim }}>
+              {filter.allowedPatterns.length === 0 ? '（不限，顯示全部）' : `（限定 ${filter.allowedPatterns.length} 種）`}
+            </span>
+            {filter.allowedPatterns.length > 0 && (
+              <button
+                onClick={() => setFilter((f) => ({ ...f, allowedPatterns: [] }))}
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: c.textDim, fontSize: 10, padding: 0, textDecoration: 'underline',
+                }}
+              >清除</button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {PATTERN_OPTIONS.map(({ key, label, color }) => {
+              const selected = filter.allowedPatterns.includes(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => setFilter((f) => ({
+                    ...f,
+                    allowedPatterns: selected
+                      ? f.allowedPatterns.filter((p) => p !== key)
+                      : [...f.allowedPatterns, key],
+                  }))}
+                  style={{
+                    fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 6,
+                    background: selected ? color + '26' : 'transparent',
+                    border: `1px solid ${selected ? color : c.border}`,
+                    color: selected ? color : c.textMuted,
+                    cursor: 'pointer', userSelect: 'none',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

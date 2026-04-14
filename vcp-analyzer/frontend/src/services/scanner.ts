@@ -34,6 +34,7 @@ export interface BullPickParams {
   requireVolContract: boolean; // 是否要求近期波動收斂
   volContractPct: number;      // 波動收斂門檻 % (e.g. 10 = 10%)
   volContractDays: number;     // 波動收斂觀察天數 (e.g. 15)
+  allowedPatterns: PatternShapeType[]; // 限定線型（空陣列 = 不限制）
 }
 
 // ── Main Analyze Function ──
@@ -95,6 +96,11 @@ export function analyze(
   // 1. Pattern Detection
   const [pattern, patternLabel] = detectShape(candles, n);
   const maAligned = price > ma20 && ma20 > ma60 && (ma120 <= 0 || ma60 > ma120);
+
+  // Hard filter: if user restricted to specific patterns, skip non-matches
+  if (params.allowedPatterns && params.allowedPatterns.length > 0) {
+    if (!params.allowedPatterns.includes(pattern)) return null;
+  }
 
   // 2. Distance to All-Time High
   // Use override (from monthly data, up to 20 years) if available, otherwise use candle data
@@ -282,9 +288,20 @@ function detectShape(candles: OHLCV[], n: number): [PatternShapeType, string] {
   if (lb > n - 10) lb = n - 10;
   const start = n - lb;
 
-  // Try W bottom first (most specific pattern)
+  // Check most-specific patterns first (3 pivot structures)
+  const hsResult = detectHeadShouldersBottom(candles, start, n);
+  if (hsResult) return hsResult;
+
+  const tbResult = detectTripleBottom(candles, start, n);
+  if (tbResult) return tbResult;
+
+  // Try W bottom (2 pivot structure)
   const wResult = detectWBottom(candles, start, n);
   if (wResult) return wResult;
+
+  // V bottom (sharp reversal)
+  const vResult = detectVBottom(candles, start, n);
+  if (vResult) return vResult;
 
   // Find lowest point for other patterns
   let lowestIdx = start;
@@ -313,9 +330,9 @@ function detectShape(candles: OHLCV[], n: number): [PatternShapeType, string] {
 
   const secondLow = findSecondLow(candles, start, n, lowestIdx);
 
-  // Cup
+  // Cup (圓形底)
   if (lowPos > 0.25 && lowPos < 0.65 && lowDepth > 8 && recovery > 70) {
-    return ['cup', '杯型整理'];
+    return ['cup', '圓形底（杯型）'];
   }
   // U
   if (lowPos > 0.2 && lowPos < 0.6 && lowDepth > 5 && recovery > 60) {
@@ -326,7 +343,181 @@ function detectShape(candles: OHLCV[], n: number): [PatternShapeType, string] {
     return ['n_shape', 'N型整理'];
   }
 
+  // Consolidation bottom (least specific — long tight range)
+  const cbResult = detectConsolidation(candles, start, n);
+  if (cbResult) return cbResult;
+
   return ['none', ''];
+}
+
+// ── Helper: find all pivot lows in a range ──
+function findPivotLows(candles: OHLCV[], start: number, end: number, pivotN: number): { idx: number; low: number }[] {
+  const pivots: { idx: number; low: number }[] = [];
+  for (let i = start + pivotN; i < end - pivotN; i++) {
+    let isPivot = true;
+    for (let j = 1; j <= pivotN; j++) {
+      if (candles[i].low >= candles[i - j].low || candles[i].low >= candles[i + j].low) {
+        isPivot = false;
+        break;
+      }
+    }
+    if (isPivot) pivots.push({ idx: i, low: candles[i].low });
+  }
+  return pivots;
+}
+
+// ── Triple Bottom (三重底) ──
+// 3 pivot lows within 5% of each other, each at least 8 days apart,
+// with a clear neckline (drop > 5%) and current price recovered above 50%.
+function detectTripleBottom(candles: OHLCV[], start: number, end: number): [PatternShapeType, string] | null {
+  const minGap = 8;
+  const pivots = findPivotLows(candles, start, end, 3);
+  if (pivots.length < 3) return null;
+
+  const price = candles[end - 1].close;
+
+  for (let a = 0; a < pivots.length - 2; a++) {
+    for (let b = a + 1; b < pivots.length - 1; b++) {
+      for (let c = b + 1; c < pivots.length; c++) {
+        const p1 = pivots[a], p2 = pivots[b], p3 = pivots[c];
+        if (p2.idx - p1.idx < minGap || p3.idx - p2.idx < minGap) continue;
+
+        const minLow = Math.min(p1.low, p2.low, p3.low);
+        const maxLow = Math.max(p1.low, p2.low, p3.low);
+        if ((maxLow - minLow) / minLow * 100 > 5) continue;
+
+        // Neckline = highest high between p1 and p3
+        let neckline = 0;
+        for (let i = p1.idx; i <= p3.idx; i++) {
+          if (candles[i].high > neckline) neckline = candles[i].high;
+        }
+        if (neckline <= 0) continue;
+
+        const avgLow = (p1.low + p2.low + p3.low) / 3;
+        if ((neckline - avgLow) / neckline * 100 < 5) continue;
+
+        // Must have recovered above 50% of the base
+        if (price < avgLow + (neckline - avgLow) * 0.5) continue;
+
+        // Third low recent enough
+        if (end - p3.idx > 30) continue;
+
+        return ['triple_bottom', '三重底'];
+      }
+    }
+  }
+  return null;
+}
+
+// ── Head & Shoulders Bottom (頭肩底) ──
+// 3 pivot lows: left shoulder, head (lowest), right shoulder.
+// Shoulders within 5% of each other; head at least 3% below average shoulder.
+function detectHeadShouldersBottom(candles: OHLCV[], start: number, end: number): [PatternShapeType, string] | null {
+  const minGap = 8;
+  const pivots = findPivotLows(candles, start, end, 3);
+  if (pivots.length < 3) return null;
+
+  const price = candles[end - 1].close;
+
+  for (let a = 0; a < pivots.length - 2; a++) {
+    for (let b = a + 1; b < pivots.length - 1; b++) {
+      for (let c = b + 1; c < pivots.length; c++) {
+        const ls = pivots[a], h = pivots[b], rs = pivots[c];
+        if (h.idx - ls.idx < minGap || rs.idx - h.idx < minGap) continue;
+
+        // Head must be the lowest
+        if (h.low >= ls.low || h.low >= rs.low) continue;
+
+        // Head at least 3% below average shoulder
+        const avgShoulder = (ls.low + rs.low) / 2;
+        if ((avgShoulder - h.low) / avgShoulder * 100 < 3) continue;
+
+        // Shoulders within 5% of each other
+        const shoulderDiff = Math.abs(ls.low - rs.low) / Math.min(ls.low, rs.low) * 100;
+        if (shoulderDiff > 5) continue;
+
+        // Neckline = highest between left shoulder and right shoulder
+        let neckline = 0;
+        for (let i = ls.idx; i <= rs.idx; i++) {
+          if (candles[i].high > neckline) neckline = candles[i].high;
+        }
+        if (neckline <= 0) continue;
+
+        // Recovery above 50% of depth
+        if (price < h.low + (neckline - h.low) * 0.5) continue;
+
+        // Right shoulder not too old
+        if (end - rs.idx > 30) continue;
+
+        return ['head_shoulders_bottom', '頭肩底'];
+      }
+    }
+  }
+  return null;
+}
+
+// ── V-Bottom (V形底) ──
+// Sharp drop (>10%) into a low, followed by sharp rally (>10%) within a short window.
+function detectVBottom(candles: OHLCV[], start: number, end: number): [PatternShapeType, string] | null {
+  // Find lowest point
+  let lowIdx = start;
+  for (let i = start; i < end; i++) {
+    if (candles[i].low < candles[lowIdx].low) lowIdx = i;
+  }
+
+  // Low should be in recent but not too recent area
+  const lb = end - start;
+  const lowPos = (lowIdx - start) / lb;
+  if (lowPos < 0.2 || lowPos > 0.85) return null;
+
+  // Pre-drop: highest point in the 25 candles before the low
+  const preStart = Math.max(start, lowIdx - 25);
+  let preHigh = 0;
+  for (let i = preStart; i <= lowIdx; i++) {
+    if (candles[i].high > preHigh) preHigh = candles[i].high;
+  }
+  const dropPct = preHigh > 0 ? (preHigh - candles[lowIdx].low) / preHigh * 100 : 0;
+  if (dropPct < 10) return null;
+
+  // Post-rally: highest point after the low
+  let postHigh = candles[lowIdx].high;
+  for (let i = lowIdx; i < end; i++) {
+    if (candles[i].high > postHigh) postHigh = candles[i].high;
+  }
+  const rallyPct = (postHigh - candles[lowIdx].low) / candles[lowIdx].low * 100;
+  if (rallyPct < 10) return null;
+
+  // Recovery should be fast — within 30 days of the low
+  if (end - lowIdx > 30) return null;
+
+  // Current price in upper half of the V
+  const price = candles[end - 1].close;
+  const vLow = candles[lowIdx].low;
+  if (price < vLow + (postHigh - vLow) * 0.5) return null;
+
+  return ['v_bottom', 'V形底'];
+}
+
+// ── Consolidation Bottom (盤整底) ──
+// Long tight range (≥ 30 days, close-to-close range ≤ 10%).
+function detectConsolidation(candles: OHLCV[], start: number, end: number): [PatternShapeType, string] | null {
+  const minDays = 30;
+  const windowStart = Math.max(start, end - 40);
+  const days = end - windowStart;
+  if (days < minDays) return null;
+
+  let hi = 0, lo = Number.MAX_VALUE;
+  for (let i = windowStart; i < end; i++) {
+    const cl = candles[i].close;
+    if (cl > hi) hi = cl;
+    if (cl < lo) lo = cl;
+  }
+  if (lo <= 0) return null;
+
+  const rangePct = (hi - lo) / lo * 100;
+  if (rangePct > 10) return null;
+
+  return ['consolidation', '盤整底'];
 }
 
 // ── W Bottom (雙重底) Detection ──
@@ -443,9 +634,13 @@ function calcBullPickScore(
 ): { score: number; breakdown: ScoreBreakdown } {
   // ① Pattern (0-20)
   let patternScore = 5;
-  if (pattern === 'cup') patternScore = 20;
+  if (pattern === 'head_shoulders_bottom') patternScore = 20;
+  else if (pattern === 'cup') patternScore = 20;
+  else if (pattern === 'triple_bottom') patternScore = 19;
   else if (pattern === 'w_bottom') patternScore = 19;
   else if (pattern === 'u_shape') patternScore = 17;
+  else if (pattern === 'v_bottom') patternScore = 16;
+  else if (pattern === 'consolidation') patternScore = 15;
   else if (pattern === 'n_shape') patternScore = 14;
 
   // ② MA alignment (0-15)
